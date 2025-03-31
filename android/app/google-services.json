@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "634757009406",
+    "project_id": "tassenger-689e4",
+    "storage_bucket": "tassenger-689e4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:634757009406:android:6ede6b56359a9813af7aaf",
+        "android_client_info": {
+          "package_name": "com.virtualify.tassenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDTECQscK9fs56EctVqhtAIyU7jgoa_3p0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

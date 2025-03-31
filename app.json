@@ -1,28 +1,81 @@
 {
   "expo": {
-    "name": "TassengerApp",
-    "slug": "TassengerApp",
+    "name": "Tassenger",
+    "slug": "tassengerapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "userInterfaceStyle": "automatic",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#3497F9"
     },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.virtualify.tassenger",
+      "googleServicesFile": "./ios/Tassenger/GoogleService-Info.plist",
+      "infoPlist": {
+        "NSContactsUsageDescription": "Tassenger needs access to your contacts to help you connect with friends and colleagues."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      }
+        "backgroundColor": "#3497F9"
+      },
+      "package": "com.virtualify.tassenger",
+      "googleServicesFile": "./android/app/google-services.json",
+      "permissions": [
+        "android.permission.READ_CONTACTS",
+        "android.permission.SEND_SMS",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS",
+        "android.permission.WRITE_CONTACTS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "node_modules/@expo-google-fonts/poppins/Poppins_400Regular.ttf",
+            "node_modules/@expo-google-fonts/poppins/Poppins_500Medium.ttf",
+            "node_modules/@expo-google-fonts/poppins/Poppins_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/poppins/Poppins_700Bold.ttf",
+            "node_modules/@expo-google-fonts/inter/Inter_400Regular.ttf",
+            "node_modules/@expo-google-fonts/inter/Inter_500Medium.ttf",
+            "node_modules/@expo-google-fonts/inter/Inter_600SemiBold.ttf",
+            "node_modules/@expo-google-fonts/roboto-mono/RobotoMono_400Regular.ttf",
+            "node_modules/@expo-google-fonts/roboto-mono/RobotoMono_500Medium.ttf"
+          ]
+        }
+      ],
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Allow Tassenger to access your contacts."
+        }
+      ],
+      [
+        "expo-notifications"
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/messaging"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "dc93b267-306a-4cc3-a66b-b01ea680488d"
+      }
+    },
+    "owner": "hemantsinghrajput047"
   }
 }
