@@ -28,6 +28,7 @@ interface UserAssignmentModalProps {
   onDismiss: () => void;
   onSelectUser: (user: UserProfile | null) => void;
   currentAssigneeId?: string | null;
+  allowMultiple?: boolean;
 }
 
 const UserAssignmentModal = ({
@@ -35,6 +36,7 @@ const UserAssignmentModal = ({
   onDismiss,
   onSelectUser,
   currentAssigneeId,
+  allowMultiple = false,
 }: UserAssignmentModalProps) => {
   const { theme } = useTheme();
   const { user: currentUser } = useAppSelector((state) => state.auth);

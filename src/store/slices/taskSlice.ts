@@ -34,7 +34,7 @@ export type TaskCategory =
   | "finance"
   | "other";
 
-// Enhanced Task interface with group-related fields
+// Enhanced Task interface with group-related fields and recurring task properties
 export interface Task {
   id: string;
   title: string;
@@ -57,6 +57,10 @@ export interface Task {
   reminderIdentifiers?: string[]; // Add this line for multiple reminders
   parentTaskId?: string; // For subtasks
   subtasks?: string[]; // IDs of subtasks
+  // Recurring task properties
+  isRecurring?: boolean;
+  recurrencePatternId?: string;
+  recurrenceIndex?: number;
 }
 
 // Add more functionality to the initial state

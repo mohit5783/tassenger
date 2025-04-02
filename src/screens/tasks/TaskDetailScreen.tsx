@@ -29,6 +29,7 @@ import {
   updateTask,
   type TaskStatus,
 } from "../../store/slices/taskSlice";
+import { generateNextOccurrence } from "../../store/slices/recurrenceSlice";
 import { format, isValid } from "date-fns";
 import { MoreVertical } from "react-native-feather";
 import { collection, getDocs, query, where } from "firebase/firestore";
@@ -163,15 +164,37 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     });
   };
 
-  const handleUpdateStatus = (status: TaskStatus) => {
+  const handleUpdateStatus = async (status: TaskStatus) => {
     if (!currentTask) return;
 
-    dispatch(
-      updateTask({
-        taskId,
-        updates: { status },
-      })
-    );
+    try {
+      // Update the task status
+      await dispatch(
+        updateTask({
+          taskId,
+          updates: {
+            status,
+            ...(status === "completed" ? { completedAt: Date.now() } : {}),
+          },
+        })
+      ).unwrap();
+
+      // If the task is completed and it's a recurring task, generate the next occurrence
+      if (
+        status === "completed" &&
+        currentTask.isRecurring &&
+        currentTask.recurrencePatternId
+      ) {
+        await dispatch(
+          generateNextOccurrence({
+            taskId,
+            completedDate: new Date(),
+          })
+        ).unwrap();
+      }
+    } catch (error) {
+      console.error("Failed to update task status:", error);
+    }
   };
 
   const handleToggleReminder = async () => {
@@ -398,6 +421,20 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               {(currentTask.category || "other").charAt(0).toUpperCase() +
                 (currentTask.category || "other").slice(1)}
             </Chip>
+
+            {/* Add recurring chip if task is recurring */}
+            {currentTask.isRecurring && (
+              <Chip
+                style={[
+                  styles.recurringChip,
+                  { borderColor: theme.colors.primary },
+                ]}
+                textStyle={{ color: theme.colors.primary }}
+                icon="repeat"
+              >
+                Recurring
+              </Chip>
+            )}
           </View>
         </View>
 
@@ -544,28 +581,55 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
             </View>
           )}
 
-          {currentTask.dueDate && !isDueDatePassed && (
-            <View
-              style={[
-                styles.reminderRow,
-                { borderBottomColor: theme.colors.border },
-              ]}
-            >
-              <Text
+          {/* Add recurrence information */}
+          {currentTask.isRecurring &&
+            currentTask.recurrenceIndex !== undefined && (
+              <View
                 style={[
-                  styles.detailLabel,
-                  { color: theme.colors.textSecondary },
+                  styles.detailRow,
+                  { borderBottomColor: theme.colors.border },
                 ]}
               >
-                Set Reminder
-              </Text>
-              <Switch
-                value={reminderEnabled}
-                onValueChange={handleToggleReminder}
-                color={theme.colors.primary}
-              />
-            </View>
-          )}
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Occurrence
+                </Text>
+                <Text
+                  style={[styles.detailValue, { color: theme.colors.text }]}
+                >
+                  #{currentTask.recurrenceIndex}
+                </Text>
+              </View>
+            )}
+
+          {currentTask.dueDate &&
+            !isDueDatePassed &&
+            !currentTask.isRecurring && (
+              <View
+                style={[
+                  styles.reminderRow,
+                  { borderBottomColor: theme.colors.border },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Set Reminder
+                </Text>
+                <Switch
+                  value={reminderEnabled}
+                  onValueChange={handleToggleReminder}
+                  color={theme.colors.primary}
+                />
+              </View>
+            )}
         </View>
 
         <View
@@ -728,6 +792,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   categoryChip: {
+    backgroundColor: "transparent",
+    borderWidth: 1,
+  },
+  recurringChip: {
     backgroundColor: "transparent",
     borderWidth: 1,
   },

@@ -11,9 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#3497F9"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.virtualify.tassenger",
@@ -65,11 +63,17 @@
           "contactsPermission": "Allow Tassenger to access your contacts."
         }
       ],
-      [
-        "expo-notifications"
-      ],
+      ["expo-notifications"],
       "@react-native-firebase/app",
-      "@react-native-firebase/messaging"
+      "@react-native-firebase/messaging",
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ]
     ],
     "extra": {
       "eas": {

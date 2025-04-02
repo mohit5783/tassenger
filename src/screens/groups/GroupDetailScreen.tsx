@@ -1,60 +1,82 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import {
-  View,
-  StyleSheet,
-  ScrollView,
-  TouchableOpacity,
-  Alert,
-} from "react-native";
+import { useState, useEffect } from "react";
+import { View, StyleSheet, ScrollView, Alert } from "react-native";
 import {
   Text,
   Appbar,
-  ActivityIndicator,
-  Card,
-  Title,
-  Paragraph,
   Button,
   List,
-  Divider,
   Avatar,
+  FAB,
+  Menu,
+  ActivityIndicator,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { fetchGroup, deleteGroup } from "../../store/slices/groupSlice";
-import { filterTasksByGroup } from "../../store/slices/taskSlice";
 import {
-  Users,
-  List as ListIcon,
-  MessageCircle,
-  MoreVertical,
-} from "react-native-feather";
+  fetchGroup,
+  removeGroupMember,
+  deleteGroup,
+} from "../../store/slices/groupSlice";
+import { filterTasksByGroup } from "../../store/slices/taskSlice";
+import UserService, { type UserProfile } from "../../services/UserService";
 
-interface GroupDetailScreenProps {
-  navigation: any;
-  route: any;
-}
-
-const GroupDetailScreen = ({ navigation, route }: GroupDetailScreenProps) => {
+const GroupDetailScreen = ({ navigation, route }: any) => {
   const { groupId } = route.params;
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { currentGroup, isLoading } = useAppSelector((state) => state.groups);
   const { user } = useAppSelector((state) => state.auth);
+  const { currentGroup, isLoading } = useAppSelector((state) => state.groups);
+  const { filteredTasks } = useAppSelector((state) => state.tasks);
   const [menuVisible, setMenuVisible] = useState(false);
+  const [members, setMembers] = useState<UserProfile[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
-    if (groupId) {
-      dispatch(fetchGroup(groupId));
-      dispatch(filterTasksByGroup(groupId));
-    }
+    dispatch(fetchGroup(groupId));
+    dispatch(filterTasksByGroup(groupId));
   }, [dispatch, groupId]);
 
-  // Check if current user is an admin
-  const isAdmin = currentGroup?.members.some(
-    (member) => member.userId === user?.id && member.role === "admin"
-  );
+  useEffect(() => {
+    if (currentGroup?.members) {
+      loadMembers();
+    }
+  }, [currentGroup]);
+
+  const loadMembers = async () => {
+    if (!currentGroup?.members || currentGroup.members.length === 0) return;
+
+    setLoadingMembers(true);
+    try {
+      const memberData = await UserService.getUsersByIds(currentGroup.members);
+      setMembers(memberData);
+    } catch (error) {
+      console.error("Error loading members:", error);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleLeaveGroup = () => {
+    if (!user) return;
+
+    Alert.alert("Leave Group", "Are you sure you want to leave this group?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Leave",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await dispatch(removeGroupMember({ groupId, userId: user.id })).unwrap();
+            navigation.goBack();
+          } catch (error) {
+            console.error("Failed to leave group:", error);
+          }
+        },
+      },
+    ]);
+  };
 
   const handleDeleteGroup = () => {
     Alert.alert(
@@ -77,6 +99,8 @@ const GroupDetailScreen = ({ navigation, route }: GroupDetailScreenProps) => {
       ]
     );
   };
+
+  const isAdmin = currentGroup?.createdBy === user?.id;
 
   if (isLoading || !currentGroup) {
     return (
@@ -105,172 +129,137 @@ const GroupDetailScreen = ({ navigation, route }: GroupDetailScreenProps) => {
           title={currentGroup.name}
           color={theme.colors.onPrimary}
         />
-        {isAdmin && (
-          <Appbar.Action
-            icon={({ size, color }) => (
-              <MoreVertical width={size} height={size} stroke={color} />
-            )}
-            color={theme.colors.onPrimary}
-            onPress={() => setMenuVisible(!menuVisible)}
+        <Menu
+          visible={menuVisible}
+          onDismiss={() => setMenuVisible(false)}
+          anchor={
+            <Appbar.Action
+              icon="dots-vertical"
+              color={theme.colors.onPrimary}
+              onPress={() => setMenuVisible(true)}
+            />
+          }
+        >
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              navigation.navigate("EditGroup", { groupId });
+            }}
+            title="Edit Group"
+            disabled={!isAdmin}
           />
-        )}
-        {menuVisible && (
-          <View
-            style={[styles.menu, { backgroundColor: theme.colors.background }]}
-          >
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                // Navigate to edit group screen - to be implemented
-              }}
-            >
-              <Text>Edit Group</Text>
-            </TouchableOpacity>
-            <Divider />
-            <TouchableOpacity
-              style={styles.menuItem}
-              onPress={() => {
-                setMenuVisible(false);
-                handleDeleteGroup();
-              }}
-            >
-              <Text style={{ color: theme.colors.error }}>Delete Group</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              handleLeaveGroup();
+            }}
+            title="Leave Group"
+            disabled={isAdmin && currentGroup.members.length > 1}
+          />
+          <Menu.Item
+            onPress={() => {
+              setMenuVisible(false);
+              handleDeleteGroup();
+            }}
+            title="Delete Group"
+            disabled={!isAdmin}
+          />
+        </Menu>
       </Appbar.Header>
 
-      <ScrollView>
-        <Card style={styles.infoCard}>
-          <Card.Content>
-            <Title>{currentGroup.name}</Title>
-            {currentGroup.description && (
-              <Paragraph>{currentGroup.description}</Paragraph>
-            )}
-            <View style={styles.stats}>
-              <Text style={styles.stat}>
-                {currentGroup.members.length}{" "}
-                {currentGroup.members.length === 1 ? "member" : "members"}
-              </Text>
-              {/* Can add more stats here if needed */}
-            </View>
-          </Card.Content>
-        </Card>
-
-        <View style={styles.actionSection}>
-          <Button
-            mode="contained"
-            icon={({ size, color }) => (
-              <ListIcon width={size} height={size} stroke={color} />
-            )}
-            style={[
-              styles.actionButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            onPress={() => navigation.navigate("GroupTasks", { groupId })}
-          >
-            Tasks
-          </Button>
-
-          <Button
-            mode="contained"
-            icon={({ size, color }) => (
-              <Users width={size} height={size} stroke={color} />
-            )}
-            style={[
-              styles.actionButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            onPress={() => navigation.navigate("GroupMembers", { groupId })}
-          >
-            Members
-          </Button>
-
-          {currentGroup.hasChat && currentGroup.conversationId && (
-            <Button
-              mode="contained"
-              icon={({ size, color }) => (
-                <MessageCircle width={size} height={size} stroke={color} />
-              )}
-              style={[
-                styles.actionButton,
-                { backgroundColor: theme.colors.primary },
-              ]}
-              onPress={() =>
-                navigation.navigate("Chat", {
-                  screen: "ConversationDetail",
-                  params: { conversationId: currentGroup.conversationId },
-                })
-              }
-            >
-              Chat
-            </Button>
-          )}
+      <ScrollView style={{ backgroundColor: theme.colors.background }}>
+        <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+          <Text style={styles.sectionTitle}>Description</Text>
+          <Text style={styles.description}>
+            {currentGroup.description || "No description provided."}
+          </Text>
         </View>
 
-        <Card style={styles.membersCard}>
-          <Card.Title
-            title="Members"
-            subtitle={`${currentGroup.members.length} members`}
-          />
-          <Card.Content>
-            <List.Section>
-              {currentGroup.members.slice(0, 3).map((member) => (
+        <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+          <Text style={styles.sectionTitle}>Members</Text>
+          {loadingMembers ? (
+            <ActivityIndicator size="small" color={theme.colors.primary} />
+          ) : (
+            <>
+              {members.map((member) => (
                 <List.Item
-                  key={member.userId}
-                  title={member.userName || member.userId}
-                  description={member.role === "admin" ? "Admin" : "Member"}
-                  left={() => (
+                  key={member.id}
+                  title={
+                    member.displayName || member.phoneNumber || "Unknown User"
+                  }
+                  description={
+                    member.id === currentGroup.createdBy ? "Admin" : "Member"
+                  }
+                  left={(props) => (
                     <Avatar.Text
+                      {...props}
                       size={40}
-                      label={(member.userName?.[0] || "U").toUpperCase()}
-                      style={{ backgroundColor: theme.colors.primary }}
+                      label={(member.displayName || member.phoneNumber || "?")
+                        .substring(0, 1)
+                        .toUpperCase()}
                     />
                   )}
                 />
               ))}
-              {currentGroup.members.length > 3 && (
-                <Button
-                  mode="text"
+              <Button
+                mode="outlined"
+                onPress={() => navigation.navigate("GroupMembers", { groupId })}
+                style={styles.viewAllButton}
+              >
+                View All Members
+              </Button>
+            </>
+          )}
+        </View>
+
+        <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
+          <Text style={styles.sectionTitle}>Tasks</Text>
+          {filteredTasks.length > 0 ? (
+            <>
+              {filteredTasks.slice(0, 3).map((task) => (
+                <List.Item
+                  key={task.id}
+                  title={task.title}
+                  description={`Status: ${task.status}`}
+                  left={(props) => (
+                    <List.Icon
+                      {...props}
+                      icon={
+                        task.status === "completed"
+                          ? "check-circle"
+                          : "circle-outline"
+                      }
+                    />
+                  )}
                   onPress={() =>
-                    navigation.navigate("GroupMembers", { groupId })
+                    navigation.navigate("Tasks", {
+                      screen: "TaskDetail",
+                      params: { taskId: task.id },
+                    })
                   }
+                />
+              ))}
+              {filteredTasks.length > 3 && (
+                <Button
+                  mode="outlined"
+                  onPress={() => navigation.navigate("GroupTasks", { groupId })}
+                  style={styles.viewAllButton}
                 >
-                  See all members
+                  View All Tasks
                 </Button>
               )}
-            </List.Section>
-          </Card.Content>
-        </Card>
-
-        {isAdmin && (
-          <Card style={styles.adminCard}>
-            <Card.Title title="Admin Actions" />
-            <Card.Content>
-              <Button
-                mode="outlined"
-                icon="plus"
-                style={styles.adminButton}
-                onPress={() =>
-                  navigation.navigate("CreateGroupTask", { groupId })
-                }
-              >
-                Create Task
-              </Button>
-
-              <Button
-                mode="outlined"
-                icon="account-plus"
-                style={styles.adminButton}
-                onPress={() => navigation.navigate("GroupMembers", { groupId })}
-              >
-                Manage Members
-              </Button>
-            </Card.Content>
-          </Card>
-        )}
+            </>
+          ) : (
+            <Text style={styles.emptyText}>No tasks in this group yet.</Text>
+          )}
+        </View>
       </ScrollView>
+
+      <FAB
+        style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+        icon="plus"
+        onPress={() => navigation.navigate("CreateGroupTask", { groupId })}
+      />
     </View>
   );
 };
@@ -283,55 +272,34 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  infoCard: {
-    margin: 16,
+  section: {
+    margin: 8,
+    padding: 16,
+    borderRadius: 8,
   },
-  stats: {
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    marginBottom: 12,
+  },
+  description: {
+    fontSize: 16,
+    lineHeight: 24,
+  },
+  viewAllButton: {
     marginTop: 8,
-    flexDirection: "row",
   },
-  stat: {
-    fontSize: 14,
-    color: "#8E8E93",
+  emptyText: {
+    textAlign: "center",
+    marginVertical: 16,
+    color: "#888",
   },
-  actionSection: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginTop: 8,
-    marginBottom: 16,
-    paddingHorizontal: 16,
-  },
-  actionButton: {
-    flex: 1,
-    marginHorizontal: 4,
-  },
-  membersCard: {
-    margin: 16,
-    marginTop: 0,
-  },
-  adminCard: {
-    margin: 16,
-    marginTop: 0,
-    marginBottom: 24,
-  },
-  adminButton: {
-    marginBottom: 8,
-  },
-  menu: {
+
+  fab: {
     position: "absolute",
-    top: 56,
-    right: 16,
-    width: 150,
-    borderRadius: 4,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    margin: 16,
+    right: 0,
+    bottom: 0,
   },
 });
 

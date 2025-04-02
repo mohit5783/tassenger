@@ -1,27 +1,10 @@
-// Group and role types
-export type GroupRole = "admin" | "member";
+export type TaskGroupStatus =
+  | "assigned"
+  | "inProgress"
+  | "submitted"
+  | "reviewed"
+  | "reopened";
 
-export interface GroupMember {
-  id: string;
-  userId: string;
-  userName?: string;
-  role: GroupRole;
-  joinedAt: number;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  description?: string;
-  createdBy: string;
-  createdAt: number;
-  updatedAt: number;
-  members: GroupMember[];
-  hasChat: boolean;
-  conversationId?: string; // Add this property
-}
-
-// Enhanced task types for role-based assignment
 export interface TaskAssignment {
   assigneeId: string;
   assigneeName?: string;
@@ -40,10 +23,19 @@ export interface TaskRejection {
   timestamp: number;
 }
 
-export type TaskGroupStatus =
-  | "assigned"
-  | "inProgress"
-  | "doneByAssignee"
-  | "pendingReview"
-  | "reviewed"
-  | "reopened";
+export interface GroupMember {
+  id: string;
+  displayName?: string;
+  role: "admin" | "member";
+  joinedAt: number;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  description?: string;
+  createdBy: string;
+  members: string[];
+  createdAt: number;
+  updatedAt: number;
+}

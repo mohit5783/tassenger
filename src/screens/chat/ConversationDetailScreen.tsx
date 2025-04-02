@@ -1,279 +1,96 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
   View,
   StyleSheet,
   FlatList,
+  TextInput as RNTextInput,
   KeyboardAvoidingView,
   Platform,
   TouchableOpacity,
-  Image,
-  Keyboard,
 } from "react-native";
-import {
-  Text,
-  TextInput,
-  ActivityIndicator,
-  Avatar,
-  Menu,
-  Appbar,
-} from "react-native-paper";
+import { Text, Appbar, Avatar, ActivityIndicator } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
+  fetchConversation,
   fetchMessages,
   sendMessage,
-  markConversationAsRead,
+  markMessagesAsRead,
   type Message,
 } from "../../store/slices/chatSlice";
 import { format, isToday, isYesterday } from "date-fns";
-import { Paperclip, Send, MoreVertical } from "react-native-feather";
-import * as ImagePicker from "expo-image-picker";
-import { storage } from "../../api/firebase/config";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { v4 as uuidv4 } from "uuid";
+import { Send, Paperclip } from "react-native-feather";
+import TaskShareModal from "../../components/TaskShareModal";
+import type { Task } from "../../store/slices/taskSlice";
 
 const ConversationDetailScreen = ({ navigation, route }: any) => {
   const { conversationId } = route.params;
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { messages, conversations, isLoading } = useAppSelector(
+  const { currentConversation, messages, isLoading } = useAppSelector(
     (state) => state.chat
   );
   const { user } = useAppSelector((state) => state.auth);
   const [messageText, setMessageText] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [showTaskModal, setShowTaskModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
-  const currentConversation = conversations.find(
-    (c) => c.id === conversationId
-  );
 
   useEffect(() => {
-    if (user && conversationId) {
+    if (conversationId) {
+      dispatch(fetchConversation(conversationId));
       dispatch(fetchMessages(conversationId));
-      dispatch(markConversationAsRead({ conversationId, userId: user.id }));
+    }
+  }, [dispatch, conversationId]);
+
+  useEffect(() => {
+    // Mark messages as read when the conversation is opened
+    if (user && conversationId) {
+      dispatch(markMessagesAsRead({ conversationId, userId: user.id }));
     }
   }, [dispatch, conversationId, user]);
 
-  const handleSend = async () => {
-    if (!messageText.trim() || !user) return;
+  const handleSendMessage = () => {
+    if (!messageText.trim() || !user || !currentConversation) return;
 
-    try {
-      await dispatch(
-        sendMessage({
-          conversationId,
-          text: messageText.trim(),
-          senderId: user.id,
-          senderName: user.displayName || user.phoneNumber || "User",
-        })
-      ).unwrap();
-
-      setMessageText("");
-      Keyboard.dismiss();
-    } catch (error) {
-      console.error("Failed to send message:", error);
-    }
+    dispatch(
+      sendMessage({
+        conversationId,
+        text: messageText.trim(),
+        senderId: user.id,
+        senderName: user.displayName || user.phoneNumber || "User",
+      })
+    );
+    setMessageText("");
   };
 
-  const handleAttachment = async () => {
-    if (!user) return;
+  const handleShareTask = (task: Task) => {
+    if (!user || !currentConversation) return;
 
-    const permissionResult =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) {
-      alert("You need to allow access to your photos to share images");
-      return;
-    }
+    dispatch(
+      sendMessage({
+        conversationId,
+        text: `Shared task: ${task.title}`,
+        senderId: user.id,
+        senderName: user.displayName || user.phoneNumber || "User",
+        attachments: [
+          {
+            type: "task",
+            id: task.id,
+            name: task.title,
+          },
+        ],
+      })
+    );
+  };
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 0.8,
+  const handleViewTask = (taskId: string) => {
+    // Use the correct navigation pattern for nested navigators
+    navigation.navigate("Tasks", {
+      screen: "TaskDetail",
+      params: { taskId },
     });
-
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const selectedImage = result.assets[0];
-      await uploadAndSendImage(selectedImage.uri);
-    }
-  };
-
-  const uploadAndSendImage = async (uri: string) => {
-    if (!user) return;
-
-    setUploading(true);
-    try {
-      const response = await fetch(uri);
-      const blob = await response.blob();
-
-      const imageId = uuidv4();
-      const storageRef = ref(
-        storage,
-        `chat_images/${conversationId}/${imageId}`
-      );
-      await uploadBytes(storageRef, blob);
-      const downloadURL = await getDownloadURL(storageRef);
-
-      await dispatch(
-        sendMessage({
-          conversationId,
-          text: "Sent an image",
-          senderId: user.id,
-          senderName: user.displayName || user.phoneNumber || "User",
-          attachments: [
-            {
-              type: "image",
-              url: downloadURL,
-            },
-          ],
-        })
-      ).unwrap();
-    } catch (error) {
-      console.error("Error uploading image:", error);
-      alert("Failed to upload image. Please try again.");
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const formatMessageTime = (timestamp: number) => {
-    if (!timestamp) return "";
-
-    const date = new Date(timestamp);
-    if (isToday(date)) {
-      return format(date, "h:mm a");
-    } else if (isYesterday(date)) {
-      return "Yesterday " + format(date, "h:mm a");
-    } else {
-      return format(date, "MMM d, h:mm a");
-    }
-  };
-
-  const renderDateSeparator = (date: Date) => {
-    let dateText;
-    if (isToday(date)) {
-      dateText = "Today";
-    } else if (isYesterday(date)) {
-      dateText = "Yesterday";
-    } else {
-      dateText = format(date, "MMMM d, yyyy");
-    }
-
-    return (
-      <View style={styles.dateSeparator}>
-        <Text
-          style={[
-            styles.dateSeparatorText,
-            { color: theme.colors.textSecondary },
-          ]}
-        >
-          {dateText}
-        </Text>
-      </View>
-    );
-  };
-
-  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
-    const isCurrentUser = item.senderId === user?.id;
-    const showDateSeparator =
-      index === 0 ||
-      (messages[index - 1] &&
-        new Date(messages[index - 1].createdAt).toDateString() !==
-          new Date(item.createdAt).toDateString());
-
-    return (
-      <>
-        {showDateSeparator && renderDateSeparator(new Date(item.createdAt))}
-        <View
-          style={[
-            styles.messageContainer,
-            isCurrentUser ? styles.currentUserMessage : styles.otherUserMessage,
-            isCurrentUser
-              ? { backgroundColor: theme.colors.primary }
-              : { backgroundColor: theme.dark ? "#333333" : "#f0f0f0" },
-          ]}
-        >
-          {!isCurrentUser && !currentConversation?.isGroup && (
-            <Text style={[styles.senderName, { color: theme.colors.primary }]}>
-              {item.senderName}
-            </Text>
-          )}
-
-          {item.attachments?.map((attachment, attachIndex) => {
-            if (attachment.type === "image") {
-              return (
-                <Image
-                  key={attachIndex}
-                  source={{ uri: attachment.url }}
-                  style={styles.attachmentImage}
-                  resizeMode="cover"
-                />
-              );
-            } else if (attachment.type === "task") {
-              return (
-                <TouchableOpacity
-                  key={attachIndex}
-                  style={[
-                    styles.taskAttachment,
-                    { backgroundColor: theme.dark ? "#444444" : "#e0e0e0" },
-                  ]}
-                  onPress={() =>
-                    navigation.navigate("Tasks", {
-                      screen: "TaskDetail",
-                      params: { taskId: attachment.id },
-                    })
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.taskAttachmentTitle,
-                      { color: theme.colors.text },
-                    ]}
-                  >
-                    Task: {attachment.name}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.taskAttachmentAction,
-                      { color: theme.colors.primary },
-                    ]}
-                  >
-                    View Task
-                  </Text>
-                </TouchableOpacity>
-              );
-            }
-            return null;
-          })}
-
-          <Text
-            style={[
-              styles.messageText,
-              {
-                color: isCurrentUser
-                  ? theme.colors.onPrimary
-                  : theme.colors.text,
-              },
-            ]}
-          >
-            {item.text}
-          </Text>
-          <Text
-            style={[
-              styles.messageTime,
-              {
-                color: isCurrentUser
-                  ? "rgba(255, 255, 255, 0.7)"
-                  : theme.colors.textSecondary,
-              },
-            ]}
-          >
-            {formatMessageTime(item.createdAt)}
-          </Text>
-        </View>
-      </>
-    );
   };
 
   const getConversationTitle = () => {
@@ -286,7 +103,7 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     // For direct messages, show the other person's name
     if (!currentConversation.isGroup) {
       const otherParticipantId = currentConversation.participants.find(
-        (id: string) => id !== user.id
+        (id) => id !== user.id
       );
       return otherParticipantId &&
         currentConversation.participantNames[otherParticipantId]
@@ -297,15 +114,194 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     // For group chats without a title, list participants
     return (
       Object.values(currentConversation.participantNames)
-        .filter((_: any, index: number) => index < 3)
+        .filter((_, index) => index < 3)
         .join(", ") + (currentConversation.participants.length > 3 ? "..." : "")
     );
   };
 
-  const getInitials = (name: string) => {
-    if (!name) return "?";
-    return name.substring(0, 2).toUpperCase();
+  const formatMessageTime = (timestamp: number) => {
+    const date = new Date(timestamp);
+    return format(date, "h:mm a");
   };
+
+  const formatMessageDate = (timestamp: number) => {
+    const date = new Date(timestamp);
+
+    if (isToday(date)) {
+      return "Today";
+    } else if (isYesterday(date)) {
+      return "Yesterday";
+    } else {
+      return format(date, "MMMM d, yyyy");
+    }
+  };
+
+  const shouldShowDate = (message: Message, index: number) => {
+    if (index === 0) return true;
+
+    const prevMessage = messages[index - 1];
+    const prevDate = new Date(prevMessage.createdAt);
+    const currentDate = new Date(message.createdAt);
+
+    return (
+      prevDate.getDate() !== currentDate.getDate() ||
+      prevDate.getMonth() !== currentDate.getMonth() ||
+      prevDate.getFullYear() !== currentDate.getFullYear()
+    );
+  };
+
+  const renderMessage = ({ item, index }: { item: Message; index: number }) => {
+    const isOwnMessage = item.senderId === user?.id;
+    const hasTaskAttachment = item.attachments?.some(
+      (att) => att.type === "task"
+    );
+
+    return (
+      <View>
+        {shouldShowDate(item, index) && (
+          <View style={styles.dateContainer}>
+            <Text style={styles.dateText}>
+              {formatMessageDate(item.createdAt)}
+            </Text>
+          </View>
+        )}
+
+        <View
+          style={[
+            styles.messageContainer,
+            isOwnMessage
+              ? styles.ownMessageContainer
+              : styles.otherMessageContainer,
+          ]}
+        >
+          {!isOwnMessage && (
+            <Avatar.Text
+              size={30}
+              label={
+                item.senderName
+                  ? item.senderName.substring(0, 1).toUpperCase()
+                  : "U"
+              }
+              style={styles.messageAvatar}
+            />
+          )}
+
+          <View
+            style={[
+              styles.messageBubble,
+              isOwnMessage
+                ? [
+                    styles.ownMessageBubble,
+                    { backgroundColor: theme.colors.primary },
+                  ]
+                : styles.otherMessageBubble,
+              hasTaskAttachment && styles.taskMessageBubble,
+            ]}
+          >
+            {!isOwnMessage && item.senderName && (
+              <Text style={styles.senderName}>{item.senderName}</Text>
+            )}
+
+            {hasTaskAttachment ? (
+              <View>
+                <Text
+                  style={[
+                    styles.messageText,
+                    isOwnMessage
+                      ? { color: theme.colors.onPrimary }
+                      : { color: theme.colors.text },
+                  ]}
+                >
+                  {item.text}
+                </Text>
+
+                {item.attachments?.map((attachment, i) => {
+                  if (attachment.type === "task" && attachment.id) {
+                    return (
+                      <TouchableOpacity
+                        key={i}
+                        style={styles.taskAttachment}
+                        onPress={() => handleViewTask(attachment.id!)}
+                      >
+                        <View
+                          style={[
+                            styles.taskCard,
+                            {
+                              backgroundColor: isOwnMessage
+                                ? "rgba(255, 255, 255, 0.1)"
+                                : "#f0f0f0",
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.taskTitle,
+                              isOwnMessage
+                                ? { color: theme.colors.onPrimary }
+                                : { color: theme.colors.text },
+                            ]}
+                          >
+                            {attachment.name || "View Task"}
+                          </Text>
+                          <Text
+                            style={[
+                              styles.taskAction,
+                              isOwnMessage
+                                ? { color: "rgba(255, 255, 255, 0.7)" }
+                                : { color: theme.colors.primary },
+                            ]}
+                          >
+                            Tap to view
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  }
+                  return null;
+                })}
+              </View>
+            ) : (
+              <Text
+                style={[
+                  styles.messageText,
+                  isOwnMessage
+                    ? { color: theme.colors.onPrimary }
+                    : { color: theme.colors.text },
+                ]}
+              >
+                {item.text}
+              </Text>
+            )}
+
+            <Text
+              style={[
+                styles.messageTime,
+                isOwnMessage
+                  ? { color: "rgba(255, 255, 255, 0.7)" }
+                  : { color: "rgba(0, 0, 0, 0.5)" },
+              ]}
+            >
+              {formatMessageTime(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  if (isLoading && !currentConversation) {
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.centered,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -318,113 +314,56 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
           color={theme.colors.onPrimary}
           onPress={() => navigation.goBack()}
         />
-        <Avatar.Text
-          size={36}
-          label={getInitials(getConversationTitle())}
-          style={{ backgroundColor: theme.dark ? "#444444" : "#e0e0e0" }}
-          color={theme.colors.text}
-        />
         <Appbar.Content
           title={getConversationTitle()}
           color={theme.colors.onPrimary}
         />
-        <Menu
-          visible={menuVisible}
-          onDismiss={() => setMenuVisible(false)}
-          anchor={
-            <Appbar.Action
-              icon={(props) => (
-                <MoreVertical {...props} color={theme.colors.onPrimary} />
-              )}
-              onPress={() => setMenuVisible(true)}
-              color={theme.colors.onPrimary}
-            />
-          }
-        >
-          <Menu.Item onPress={() => {}} title="View Profile" />
-          <Menu.Item onPress={() => {}} title="Search" />
-          <Menu.Item onPress={() => {}} title="Mute Notifications" />
-          <Menu.Item onPress={() => {}} title="Clear Chat" />
-        </Menu>
       </Appbar.Header>
 
-      {isLoading && messages.length === 0 ? (
-        <View style={[styles.centered, { flex: 1 }]}>
-          <ActivityIndicator size="large" color={theme.colors.primary} />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={messages}
-          renderItem={renderMessage}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.messagesList}
-          inverted
-          onContentSizeChange={() => {
-            if (messages.length > 0) {
-              flatListRef.current?.scrollToOffset({
-                offset: 0,
-                animated: false,
-              });
-            }
-          }}
-        />
-      )}
+      <FlatList
+        ref={flatListRef}
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.messagesList}
+        onContentSizeChange={() =>
+          flatListRef.current?.scrollToEnd({ animated: true })
+        }
+        onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
+      />
 
-      <View
-        style={[
-          styles.inputContainer,
-          { backgroundColor: theme.dark ? "#1e1e1e" : "#f5f5f5" },
-        ]}
-      >
+      <View style={styles.inputContainer}>
         <TouchableOpacity
-          onPress={handleAttachment}
           style={styles.attachButton}
+          onPress={() => setShowTaskModal(true)}
         >
           <Paperclip width={24} height={24} stroke={theme.colors.primary} />
         </TouchableOpacity>
 
-        <TextInput
-          value={messageText}
-          onChangeText={setMessageText}
-          placeholder="What to say?"
-          style={[
-            styles.input,
-            {
-              backgroundColor: theme.dark ? "#333333" : "white",
-              color: theme.colors.text,
-            },
-          ]}
-          placeholderTextColor={theme.colors.textSecondary}
-          multiline
-          theme={{
-            colors: {
-              text: theme.colors.text,
-              placeholder: theme.colors.textSecondary,
-              primary: theme.colors.primary,
-            },
-          }}
-        />
-
-        {uploading ? (
-          <ActivityIndicator
-            size="small"
-            color={theme.colors.primary}
-            style={styles.sendButton}
+        <View style={styles.textInputContainer}>
+          <RNTextInput
+            style={styles.textInput}
+            value={messageText}
+            onChangeText={setMessageText}
+            placeholder="Type a message..."
+            multiline
           />
-        ) : (
-          <TouchableOpacity
-            onPress={handleSend}
-            style={[
-              styles.sendButton,
-              { backgroundColor: theme.colors.primary },
-            ]}
-            disabled={!messageText.trim()}
-          >
-            <Send width={20} height={20} stroke="white" />
-          </TouchableOpacity>
-        )}
+        </View>
+
+        <TouchableOpacity
+          style={[styles.sendButton, { backgroundColor: theme.colors.primary }]}
+          onPress={handleSendMessage}
+          disabled={!messageText.trim()}
+        >
+          <Send width={20} height={20} stroke={theme.colors.onPrimary} />
+        </TouchableOpacity>
       </View>
+
+      <TaskShareModal
+        visible={showTaskModal}
+        onDismiss={() => setShowTaskModal(false)}
+        onSelectTask={handleShareTask}
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -437,72 +376,102 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  header: {
-    padding: 16,
-    paddingTop: 60,
-    paddingBottom: 16,
-  },
   messagesList: {
-    paddingHorizontal: 16,
+    padding: 16,
     paddingBottom: 8,
   },
-  messageContainer: {
-    maxWidth: "80%",
-    borderRadius: 16,
-    padding: 12,
-    marginVertical: 4,
-    elevation: 1,
-  },
-  currentUserMessage: {
-    alignSelf: "flex-end",
-    borderBottomRightRadius: 4,
-  },
-  otherUserMessage: {
-    alignSelf: "flex-start",
-    borderBottomLeftRadius: 4,
-  },
-  senderName: {
-    fontSize: 12,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  messageText: {
-    fontSize: 16,
-    lineHeight: 22,
-  },
-  messageTime: {
-    fontSize: 11,
-    alignSelf: "flex-end",
-    marginTop: 4,
-  },
-  dateSeparator: {
+  dateContainer: {
     alignItems: "center",
-    marginVertical: 16,
+    marginVertical: 8,
   },
-  dateSeparatorText: {
+  dateText: {
     fontSize: 12,
-    fontWeight: "500",
+    color: "#8E8E93",
+    backgroundColor: "rgba(0, 0, 0, 0.05)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
+  messageContainer: {
+    flexDirection: "row",
+    marginBottom: 8,
+    maxWidth: "80%",
+  },
+  ownMessageContainer: {
+    alignSelf: "flex-end",
+  },
+  otherMessageContainer: {
+    alignSelf: "flex-start",
+  },
+  messageAvatar: {
+    marginRight: 8,
+    alignSelf: "flex-end",
+    marginBottom: 4,
+  },
+  messageBubble: {
+    padding: 12,
+    borderRadius: 18,
+  },
+  ownMessageBubble: {
+    borderBottomRightRadius: 4,
+  },
+  otherMessageBubble: {
+    backgroundColor: "#F0F0F0",
+    borderBottomLeftRadius: 4,
+  },
+  taskMessageBubble: {
+    padding: 8,
+    paddingBottom: 12,
+  },
+  senderName: {
+    fontSize: 12,
+    fontWeight: "bold",
+    marginBottom: 2,
+  },
+  messageText: {
+    fontSize: 16,
+  },
+  messageTime: {
+    fontSize: 10,
+    alignSelf: "flex-end",
+    marginTop: 4,
+  },
+  taskAttachment: {
+    marginTop: 8,
+  },
+  taskCard: {
+    padding: 8,
+    borderRadius: 8,
+  },
+  taskTitle: {
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  taskAction: {
+    fontSize: 12,
+  },
   inputContainer: {
     flexDirection: "row",
-    alignItems: "center",
     padding: 8,
+    alignItems: "center",
+    backgroundColor: "white",
     borderTopWidth: 1,
-    borderTopColor: "rgba(0,0,0,0.1)",
+    borderTopColor: "#E0E0E0",
   },
   attachButton: {
     padding: 8,
   },
-  input: {
+  textInputContainer: {
     flex: 1,
+    backgroundColor: "#F0F0F0",
     borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
     marginHorizontal: 8,
-    maxHeight: 120,
+  },
+  textInput: {
+    maxHeight: 100,
+    minHeight: 40,
+    fontSize: 16,
   },
   sendButton: {
     width: 40,
@@ -510,25 +479,6 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
-  },
-  attachmentImage: {
-    width: "100%",
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  taskAttachment: {
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 8,
-  },
-  taskAttachmentTitle: {
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  taskAttachmentAction: {
-    fontSize: 12,
-    fontWeight: "500",
   },
 });
 

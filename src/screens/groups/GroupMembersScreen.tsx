@@ -1,295 +1,119 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import {
-  View,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  Alert,
-} from "react-native";
+import { View, StyleSheet, FlatList, Alert } from "react-native";
 import {
   Text,
   Appbar,
   List,
   Avatar,
-  ActivityIndicator,
   Button,
-  Menu,
-  Divider,
+  ActivityIndicator,
+  FAB,
+  Dialog,
+  Portal,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import {
-  fetchGroup,
-  addGroupMember,
-  removeGroupMember,
-  changeGroupMemberRole,
-} from "../../store/slices/groupSlice";
-import type { GroupMember } from "../../types/group";
-import {
-  requestContactsPermission,
-  getContacts,
-} from "../../services/ContactsService";
+import { fetchGroup, removeGroupMember } from "../../store/slices/groupSlice";
+import UserService, { type UserProfile } from "../../services/UserService";
 
 const GroupMembersScreen = ({ navigation, route }: any) => {
   const { groupId } = route.params;
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { currentGroup, isLoading } = useAppSelector((state) => state.groups);
   const { user } = useAppSelector((state) => state.auth);
-
-  const [menuVisible, setMenuVisible] = useState<string | null>(null);
-  const [addModalVisible, setAddModalVisible] = useState(false);
-  const [contacts, setContacts] = useState<any[]>([]);
-  const [filteredContacts, setFilteredContacts] = useState<any[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-
-  useEffect(() => {
-    if (groupId) {
-      dispatch(fetchGroup(groupId));
-    }
-  }, [dispatch, groupId]);
-
-  // Check if current user is an admin
-  const isAdmin = currentGroup?.members.some(
-    (member) => member.userId === user?.id && member.role === "admin"
+  const { currentGroup, isLoading } = useAppSelector((state) => state.groups);
+  const [members, setMembers] = useState<UserProfile[]>([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [removeMemberDialogVisible, setRemoveMemberDialogVisible] =
+    useState(false);
+  const [selectedMember, setSelectedMember] = useState<UserProfile | null>(
+    null
   );
 
-  const handleChangeRole = (member: GroupMember) => {
-    if (!isAdmin || !currentGroup) return;
-
-    const newRole = member.role === "admin" ? "member" : "admin";
-
-    // Check if this is the last admin
-    if (member.role === "admin") {
-      const admins = currentGroup.members.filter((m) => m.role === "admin");
-      if (admins.length <= 1) {
-        Alert.alert(
-          "Cannot Change Role",
-          "You cannot demote the last admin of the group."
-        );
-        return;
-      }
-    }
-
-    Alert.alert(
-      "Change Role",
-      `Are you sure you want to make ${
-        member.userName || member.userId
-      } a ${newRole}?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Confirm",
-          onPress: async () => {
-            try {
-              await dispatch(
-                changeGroupMemberRole({
-                  groupId,
-                  userId: member.userId,
-                  newRole,
-                })
-              ).unwrap();
-            } catch (error) {
-              console.error("Failed to change role:", error);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleRemoveMember = (member: GroupMember) => {
-    if (!isAdmin || !currentGroup) return;
-
-    // Cannot remove yourself if you're the last admin
-    if (member.userId === user?.id && member.role === "admin") {
-      const admins = currentGroup.members.filter((m) => m.role === "admin");
-      if (admins.length <= 1) {
-        Alert.alert(
-          "Cannot Remove Yourself",
-          "You cannot remove yourself if you're the last admin. Make someone else an admin first."
-        );
-        return;
-      }
-    }
-
-    Alert.alert(
-      "Remove Member",
-      `Are you sure you want to remove ${
-        member.userName || member.userId
-      } from the group?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await dispatch(
-                removeGroupMember({
-                  groupId,
-                  userId: member.userId,
-                })
-              ).unwrap();
-            } catch (error) {
-              console.error("Failed to remove member:", error);
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleAddMember = () => {
-    // This would open a modal or navigate to a screen to select contacts
-    // For this example, let's just show an alert
-    loadContacts();
-    setAddModalVisible(true);
-  };
-
-  const loadContacts = async () => {
-    try {
-      const hasPermission = await requestContactsPermission();
-      if (!hasPermission) {
-        return;
-      }
-
-      const contactsList = await getContacts();
-
-      // Filter out contacts that are already members
-      const existingMemberIds =
-        currentGroup?.members.map((m) => m.userId) || [];
-      const availableContacts = contactsList.filter(
-        (contact) =>
-          contact.hasApp &&
-          contact.userId &&
-          !existingMemberIds.includes(contact.userId)
-      );
-
-      setContacts(availableContacts);
-      setFilteredContacts(availableContacts);
-    } catch (error) {
-      console.error("Error loading contacts:", error);
-    }
-  };
+  useEffect(() => {
+    dispatch(fetchGroup(groupId));
+  }, [dispatch, groupId]);
 
   useEffect(() => {
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
-      setFilteredContacts(
-        contacts.filter(
-          (contact) =>
-            contact.name.toLowerCase().includes(query) ||
-            contact.phoneNumber.includes(query)
-        )
-      );
-    } else {
-      setFilteredContacts(contacts);
+    if (currentGroup?.members) {
+      loadMembers();
     }
-  }, [searchQuery, contacts]);
+  }, [currentGroup]);
 
-  const handleAddNewMember = async (contact: any) => {
-    if (!currentGroup) return;
+  const loadMembers = async () => {
+    if (!currentGroup?.members || currentGroup.members.length === 0) return;
+
+    setLoadingMembers(true);
+    try {
+      const memberData = await UserService.getUsersByIds(currentGroup.members);
+      setMembers(memberData);
+    } catch (error) {
+      console.error("Error loading members:", error);
+    } finally {
+      setLoadingMembers(false);
+    }
+  };
+
+  const handleRemoveMember = async () => {
+    if (!selectedMember || !user) return;
 
     try {
       await dispatch(
-        addGroupMember({
+        removeGroupMember({
           groupId,
-          member: {
-            userId: contact.userId,
-            userName: contact.name,
-            role: "member", // Default role for new members
-          },
+          userId: selectedMember.id,
         })
       ).unwrap();
 
-      setAddModalVisible(false);
+      // Update local state
+      setMembers(members.filter((member) => member.id !== selectedMember.id));
+      setRemoveMemberDialogVisible(false);
+      setSelectedMember(null);
     } catch (error) {
-      console.error("Failed to add member:", error);
+      console.error("Failed to remove member:", error);
+      Alert.alert("Error", "Failed to remove member from group");
     }
   };
 
-  const renderMemberItem = ({ item }: { item: GroupMember }) => {
-    const isCurrentUser = item.userId === user?.id;
+  const isAdmin = currentGroup?.createdBy === user?.id;
+
+  const renderMemberItem = ({ item }: { item: UserProfile }) => {
+    const isGroupAdmin = item.id === currentGroup?.createdBy;
+    const canRemove = isAdmin && !isGroupAdmin && item.id !== user?.id;
 
     return (
       <List.Item
-        title={item.userName || item.userId}
-        description={item.role === "admin" ? "Admin" : "Member"}
-        left={() => (
+        title={item.displayName || item.phoneNumber || "Unknown User"}
+        description={isGroupAdmin ? "Admin" : "Member"}
+        left={(props) => (
           <Avatar.Text
+            {...props}
             size={40}
-            label={(item.userName?.[0] || "U").toUpperCase()}
-            style={{
-              backgroundColor:
-                item.role === "admin" ? theme.colors.primary : "#CCCCCC",
-            }}
+            label={(item.displayName || item.phoneNumber || "?")
+              .substring(0, 1)
+              .toUpperCase()}
           />
         )}
-        right={() =>
-          isAdmin && !isCurrentUser ? (
-            <TouchableOpacity
-              style={styles.menuButton}
-              onPress={() =>
-                setMenuVisible(menuVisible === item.userId ? null : item.userId)
-              }
+        right={(props) =>
+          canRemove ? (
+            <Button
+              {...props}
+              icon="account-remove"
+              mode="text"
+              onPress={() => {
+                setSelectedMember(item);
+                setRemoveMemberDialogVisible(true);
+              }}
             >
-              <Text style={{ fontSize: 20 }}>⋮</Text>
-              {menuVisible === item.userId && (
-                <View
-                  style={[
-                    styles.menu,
-                    { backgroundColor: theme.colors.background },
-                  ]}
-                >
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => {
-                      setMenuVisible(null);
-                      handleChangeRole(item);
-                    }}
-                  >
-                    <Text>
-                      Make {item.role === "admin" ? "Member" : "Admin"}
-                    </Text>
-                  </TouchableOpacity>
-                  <Divider />
-                  <TouchableOpacity
-                    style={styles.menuItem}
-                    onPress={() => {
-                      setMenuVisible(null);
-                      handleRemoveMember(item);
-                    }}
-                  >
-                    <Text style={{ color: theme.colors.error }}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </TouchableOpacity>
+              Remove
+            </Button>
           ) : null
         }
       />
     );
   };
-
-  const renderContactItem = ({ item }: { item: any }) => (
-    <List.Item
-      title={item.name}
-      description={item.phoneNumber}
-      left={() => (
-        <Avatar.Text
-          size={40}
-          label={(item.name[0] || "U").toUpperCase()}
-          style={{ backgroundColor: "#CCCCCC" }}
-        />
-      )}
-      right={() => (
-        <Button onPress={() => handleAddNewMember(item)}>Add</Button>
-      )}
-    />
-  );
 
   if (isLoading || !currentGroup) {
     return (
@@ -315,48 +139,55 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
           onPress={() => navigation.goBack()}
         />
         <Appbar.Content title="Group Members" color={theme.colors.onPrimary} />
-        {isAdmin && (
-          <Appbar.Action
-            icon="account-plus"
-            color={theme.colors.onPrimary}
-            onPress={handleAddMember}
-          />
-        )}
       </Appbar.Header>
 
-      <FlatList
-        data={currentGroup.members}
-        renderItem={renderMemberItem}
-        keyExtractor={(item) => item.userId}
-        ItemSeparatorComponent={() => <Divider />}
-        contentContainerStyle={styles.list}
-      />
-
-      <Menu
-        visible={addModalVisible}
-        onDismiss={() => setAddModalVisible(false)}
-        style={styles.contactsMenu}
-        anchor={{ x: 0, y: 0 }}
-      >
-        <Menu.Item
-          title="Add Members"
-          disabled
-          style={{ backgroundColor: theme.colors.primary }}
-          titleStyle={{ color: theme.colors.onPrimary, fontWeight: "bold" }}
+      {loadingMembers ? (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={members}
+          renderItem={renderMemberItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            <Text style={styles.emptyText}>No members found</Text>
+          }
         />
-        <Divider />
-        {filteredContacts.length > 0 ? (
-          filteredContacts.map((contact) => (
-            <Menu.Item
-              key={contact.id}
-              title={`${contact.name} (${contact.phoneNumber})`}
-              onPress={() => handleAddNewMember(contact)}
-            />
-          ))
-        ) : (
-          <Menu.Item title="No contacts to add" disabled />
-        )}
-      </Menu>
+      )}
+
+      {isAdmin && (
+        <FAB
+          style={[styles.fab, { backgroundColor: theme.colors.primary }]}
+          icon="account-plus"
+          onPress={() => navigation.navigate("AddGroupMembers", { groupId })}
+        />
+      )}
+
+      <Portal>
+        <Dialog
+          visible={removeMemberDialogVisible}
+          onDismiss={() => setRemoveMemberDialogVisible(false)}
+        >
+          <Dialog.Title>Remove Member</Dialog.Title>
+          <Dialog.Content>
+            <Text>
+              Are you sure you want to remove{" "}
+              {selectedMember?.displayName ||
+                selectedMember?.phoneNumber ||
+                "this member"}{" "}
+              from the group?
+            </Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRemoveMemberDialogVisible(false)}>
+              Cancel
+            </Button>
+            <Button onPress={handleRemoveMember}>Remove</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 };
@@ -366,39 +197,23 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   centered: {
+    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  list: {
-    flexGrow: 1,
-  },
-  menuButton: {
+  listContent: {
     padding: 8,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
   },
-  menu: {
+  emptyText: {
+    textAlign: "center",
+    marginTop: 24,
+    color: "#888",
+  },
+  fab: {
     position: "absolute",
-    top: 24,
+    margin: 16,
     right: 0,
-    width: 120,
-    borderRadius: 4,
-    elevation: 4,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-  },
-  menuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-  },
-  contactsMenu: {
-    width: "80%",
-    maxHeight: "80%",
-    alignSelf: "center",
-    marginTop: 56,
+    bottom: 0,
   },
 });
 

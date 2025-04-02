@@ -20,6 +20,7 @@ import {
   type TaskCategory,
   updateTask,
 } from "../../store/slices/taskSlice";
+import { createRecurringTask } from "../../store/slices/recurrenceSlice";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { isValid } from "date-fns";
 import UserAssignmentModal from "../../components/UserAssignmentModal";
@@ -27,6 +28,8 @@ import NotificationSettings from "../../components/NotificationSettings";
 import CustomReminderModal from "../../components/CustomReminderModal";
 import { scheduleCustomTaskReminder } from "../../services/NotificationService";
 import { v4 as uuidv4 } from "uuid";
+import RecurrenceSelector from "../../components/RecurrenceSelector";
+import type { RecurrenceOptions } from "../../types/recurrence";
 
 const CreateTaskScreen = ({ navigation, route }: any) => {
   const { theme } = useTheme();
@@ -63,6 +66,10 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
       label: string;
     }>
   >([]);
+
+  // Add state for recurrence
+  const [recurrenceOptions, setRecurrenceOptions] =
+    useState<RecurrenceOptions | null>(null);
 
   const defaultReminderTimes = [
     { id: "at_time", days: 0, hours: 0, minutes: 0, label: "At time of event" },
@@ -158,40 +165,54 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
         taskData.assignedToName = assignedUser.displayName;
       }
 
-      const result = await dispatch(createTask(taskData)).unwrap();
+      // If this is a recurring task, use the createRecurringTask action
+      if (recurrenceOptions && dueDate) {
+        await dispatch(
+          createRecurringTask({
+            taskData,
+            recurrenceOptions,
+          })
+        ).unwrap();
+      } else {
+        // Otherwise create a regular task
+        const result = await dispatch(createTask(taskData)).unwrap();
 
-      if (notificationsEnabled && dueDate && isValid(dueDate)) {
-        const reminderIdentifiers: string[] = [];
+        if (notificationsEnabled && dueDate && isValid(dueDate)) {
+          const reminderIdentifiers: string[] = [];
 
-        const allReminderTimes = [...defaultReminderTimes, ...customReminders];
+          const allReminderTimes = [
+            ...defaultReminderTimes,
+            ...customReminders,
+          ];
 
-        for (const reminderId of selectedReminders) {
-          const reminderTime = allReminderTimes.find(
-            (r) => r.id === reminderId
-          );
-          if (reminderTime) {
-            const identifier = await scheduleCustomTaskReminder(result, {
-              days: reminderTime.days,
-              hours: reminderTime.hours,
-              minutes: reminderTime.minutes,
-            });
+          for (const reminderId of selectedReminders) {
+            const reminderTime = allReminderTimes.find(
+              (r) => r.id === reminderId
+            );
+            if (reminderTime) {
+              const identifier = await scheduleCustomTaskReminder(result, {
+                days: reminderTime.days,
+                hours: reminderTime.hours,
+                minutes: reminderTime.minutes,
+              });
 
-            if (identifier) {
-              reminderIdentifiers.push(identifier);
+              if (identifier) {
+                reminderIdentifiers.push(identifier);
+              }
             }
           }
-        }
 
-        if (reminderIdentifiers.length > 0) {
-          await dispatch(
-            updateTask({
-              taskId: result.id,
-              updates: {
-                reminderSet: true,
-                reminderIdentifiers: reminderIdentifiers,
-              },
-            })
-          );
+          if (reminderIdentifiers.length > 0) {
+            await dispatch(
+              updateTask({
+                taskId: result.id,
+                updates: {
+                  reminderSet: true,
+                  reminderIdentifiers: reminderIdentifiers,
+                },
+              })
+            );
+          }
         }
       }
 
@@ -245,6 +266,11 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     } else {
       setAssignedUser(null);
     }
+  };
+
+  // Handle recurrence options change
+  const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
+    setRecurrenceOptions(options);
   };
 
   return (
@@ -478,6 +504,22 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
             />
           )}
 
+          {/* Add RecurrenceSelector component */}
+          {dueDate && (
+            <View
+              style={[
+                styles.recurrenceSection,
+                { backgroundColor: theme.dark ? "#333333" : "#f9f9f9" },
+              ]}
+            >
+              <RecurrenceSelector
+                initialDueDate={dueDate}
+                onRecurrenceChange={handleRecurrenceChange}
+                initialOptions={recurrenceOptions}
+              />
+            </View>
+          )}
+
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
             Assignment
           </Text>
@@ -493,25 +535,32 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
               : "Assign to someone"}
           </Button>
 
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            Notifications
-          </Text>
-          <NotificationSettings
-            enabled={notificationsEnabled}
-            onToggle={setNotificationsEnabled}
-            reminderTimes={[...defaultReminderTimes, ...customReminders]}
-            selectedReminders={selectedReminders}
-            onSelectReminder={(reminderId, selected) => {
-              if (selected) {
-                setSelectedReminders([...selectedReminders, reminderId]);
-              } else {
-                setSelectedReminders(
-                  selectedReminders.filter((id) => id !== reminderId)
-                );
-              }
-            }}
-            onAddCustomReminder={() => setCustomReminderModalVisible(true)}
-          />
+          {/* Only show notifications if not a recurring task */}
+          {!recurrenceOptions && (
+            <>
+              <Text
+                style={[styles.sectionTitle, { color: theme.colors.primary }]}
+              >
+                Notifications
+              </Text>
+              <NotificationSettings
+                enabled={notificationsEnabled}
+                onToggle={setNotificationsEnabled}
+                reminderTimes={[...defaultReminderTimes, ...customReminders]}
+                selectedReminders={selectedReminders}
+                onSelectReminder={(reminderId, selected) => {
+                  if (selected) {
+                    setSelectedReminders([...selectedReminders, reminderId]);
+                  } else {
+                    setSelectedReminders(
+                      selectedReminders.filter((id) => id !== reminderId)
+                    );
+                  }
+                }}
+                onAddCustomReminder={() => setCustomReminderModalVisible(true)}
+              />
+            </>
+          )}
 
           <CustomReminderModal
             visible={customReminderModalVisible}
@@ -599,6 +648,11 @@ const styles = StyleSheet.create({
   },
   dateButton: {
     marginBottom: 24,
+  },
+  recurrenceSection: {
+    marginBottom: 24,
+    borderRadius: 8,
+    padding: 8,
   },
   createButton: {
     marginTop: 8,

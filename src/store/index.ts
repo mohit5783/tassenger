@@ -2,14 +2,18 @@ import { configureStore } from "@reduxjs/toolkit";
 import authReducer from "./slices/authSlice";
 import taskReducer from "./slices/taskSlice";
 import chatReducer from "./slices/chatSlice";
-import groupReducer from "./slices/groupSlice";
+// import contactsReducer from "./slices/contactsSlice";
+import recurrenceReducer from "./slices/recurrenceSlice";
+import groupsReducer from "./slices/groupSlice";
 
 export const store = configureStore({
   reducer: {
     auth: authReducer,
     tasks: taskReducer,
     chat: chatReducer,
-    groups: groupReducer,
+    // contacts: contactsReducer,
+    recurrence: recurrenceReducer,
+    groups: groupsReducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

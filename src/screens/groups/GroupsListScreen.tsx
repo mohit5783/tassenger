@@ -1,25 +1,33 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { View, StyleSheet, FlatList, TouchableOpacity } from "react-native";
+import {
+  View,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  RefreshControl,
+} from "react-native";
 import {
   Text,
   FAB,
   Avatar,
   ActivityIndicator,
+  Searchbar,
+  Chip,
   Divider,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { fetchGroups } from "../../store/slices/groupSlice";
-import { Users } from "react-native-feather";
+import { fetchUserGroups } from "../../store/slices/groupSlice";
 
 const GroupsListScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { groups, isLoading } = useAppSelector((state) => state.groups);
   const { user } = useAppSelector((state) => state.auth);
+  const { groups, isLoading, error } = useAppSelector((state) => state.groups);
   const [refreshing, setRefreshing] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (user) {
@@ -30,56 +38,55 @@ const GroupsListScreen = ({ navigation }: any) => {
   const loadGroups = async () => {
     if (user) {
       setRefreshing(true);
-      await dispatch(fetchGroups());
+      await dispatch(fetchUserGroups(user.id));
       setRefreshing(false);
     }
   };
 
   const handleRefresh = async () => {
+    setRefreshing(true);
     await loadGroups();
+    setRefreshing(false);
   };
 
-  const renderGroupItem = ({ item }: { item: any }) => {
-    const memberCount = item.members.length;
-    // Check if current user is an admin in this group
-    const isAdmin = item.members.some(
-      (member: any) => member.userId === user?.id && member.role === "admin"
-    );
+  const handleGroupPress = (groupId: string) => {
+    navigation.navigate("GroupDetail", { groupId });
+  };
 
-    return (
-      <TouchableOpacity
-        style={styles.groupItem}
-        onPress={() => navigation.navigate("GroupDetail", { groupId: item.id })}
-      >
-        <View style={styles.groupContainer}>
-          <Avatar.Text
-            size={50}
-            label={item.name.substring(0, 2).toUpperCase()}
-            style={{ backgroundColor: theme.colors.primary }}
-          />
+  const filteredGroups = groups.filter((group: any) =>
+    group.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
-          <View style={styles.groupContent}>
-            <Text style={styles.groupName}>{item.name}</Text>
-            <View style={styles.groupMeta}>
-              <Text style={styles.memberCount}>
-                {memberCount} {memberCount === 1 ? "member" : "members"}
-              </Text>
-              {isAdmin && (
-                <Text
-                  style={[styles.adminBadge, { color: theme.colors.primary }]}
-                >
-                  Admin
-                </Text>
-              )}
-            </View>
+  const renderGroupItem = ({ item }: { item: any }) => (
+    <TouchableOpacity
+      style={styles.groupItem}
+      onPress={() => handleGroupPress(item.id)}
+    >
+      <View style={styles.groupContainer}>
+        <Avatar.Text
+          size={50}
+          label={item.name.substring(0, 2).toUpperCase()}
+          style={{ backgroundColor: theme.colors.primary }}
+        />
+        <View style={styles.groupContent}>
+          <View style={styles.groupHeader}>
+            <Text style={styles.groupTitle}>{item.name}</Text>
+          </View>
+          <View style={styles.groupPreview}>
+            <Text numberOfLines={1} style={styles.groupDescription}>
+              {item.description || "No description"}
+            </Text>
+            <Chip icon="account-multiple" style={styles.memberChip}>
+              {item.members.length}
+            </Chip>
           </View>
         </View>
-        <Divider style={styles.divider} />
-      </TouchableOpacity>
-    );
-  };
+      </View>
+      <Divider style={styles.divider} />
+    </TouchableOpacity>
+  );
 
-  if (isLoading && groups.length === 0) {
+  if (isLoading && groups.length === 0 && !refreshing) {
     return (
       <View
         style={[
@@ -89,6 +96,23 @@ const GroupsListScreen = ({ navigation }: any) => {
         ]}
       >
         <ActivityIndicator size="large" color={theme.colors.primary} />
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.centered,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Text style={{ color: theme.colors.error }}>{error}</Text>
+        <TouchableOpacity onPress={loadGroups} style={styles.retryButton}>
+          <Text style={{ color: theme.colors.primary }}>Retry</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -103,23 +127,33 @@ const GroupsListScreen = ({ navigation }: any) => {
         </Text>
       </View>
 
-      {groups.length > 0 ? (
+      <Searchbar
+        placeholder="Search groups"
+        onChangeText={setSearchQuery}
+        value={searchQuery}
+        style={styles.searchBar}
+      />
+
+      {filteredGroups.length > 0 ? (
         <FlatList
-          data={groups}
+          data={filteredGroups}
           renderItem={renderGroupItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.groupsList}
-          onRefresh={handleRefresh}
-          refreshing={refreshing}
+          contentContainerStyle={styles.groupList}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[theme.colors.primary]}
+            />
+          }
         />
       ) : (
         <View style={[styles.centered, { flex: 1 }]}>
-          <Users width={60} height={60} stroke="#CCCCCC" />
-          <Text style={{ color: theme.colors.textSecondary, marginTop: 16 }}>
-            No groups yet
-          </Text>
-          <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
-            Create a group to collaborate with others
+          <Text style={{ color: theme.colors.textSecondary }}>
+            {searchQuery
+              ? "No groups match your search"
+              : "No groups yet. Create one!"}
           </Text>
         </View>
       )}
@@ -127,7 +161,6 @@ const GroupsListScreen = ({ navigation }: any) => {
       <FAB
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         icon="plus"
-        color={theme.colors.onPrimary}
         onPress={() => navigation.navigate("CreateGroup")}
       />
     </View>
@@ -151,7 +184,11 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
   },
-  groupsList: {
+  searchBar: {
+    margin: 8,
+    borderRadius: 8,
+  },
+  groupList: {
     flexGrow: 1,
   },
   groupItem: {
@@ -159,40 +196,51 @@ const styles = StyleSheet.create({
   },
   groupContainer: {
     flexDirection: "row",
-    padding: 16,
+    padding: 12,
     alignItems: "center",
   },
   groupContent: {
     flex: 1,
-    marginLeft: 16,
+    marginLeft: 15,
   },
-  groupName: {
-    fontSize: 18,
-    fontWeight: "bold",
+  groupHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginBottom: 4,
   },
-  groupMeta: {
+  groupTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  groupPreview: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
   },
-  memberCount: {
+  groupDescription: {
     fontSize: 14,
     color: "#8E8E93",
+    flex: 1,
   },
-  adminBadge: {
-    fontSize: 14,
-    fontWeight: "500",
+  memberChip: {
     marginLeft: 8,
   },
   divider: {
     height: 1,
-    marginLeft: 82,
+    backgroundColor: "#E0E0E0",
+    marginLeft: 76,
   },
   fab: {
     position: "absolute",
     margin: 16,
     right: 0,
     bottom: 0,
+    borderRadius: 30,
+  },
+  retryButton: {
+    marginTop: 16,
+    padding: 8,
   },
 });
 
