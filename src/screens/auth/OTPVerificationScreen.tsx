@@ -5,7 +5,7 @@ import { View, StyleSheet, TouchableOpacity, Alert } from "react-native";
 import { Text, TextInput, Button } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch } from "../../store/hooks";
-import { verifyOTP, setMockUser } from "../../store/slices/authSlice";
+// import { verifyOTP, setMockUser } from "../../store/slices/authSlice";
 import { ArrowLeft } from "react-native-feather";
 
 const OTPVerificationScreen = ({ navigation, route }: any) => {
@@ -44,7 +44,7 @@ const OTPVerificationScreen = ({ navigation, route }: any) => {
 
     try {
       // Real Firebase OTP verification
-      await dispatch(verifyOTP({ verificationId, otp })).unwrap();
+      // await dispatch(verifyOTP({ verificationId, otp })).unwrap();
       setIsLoading(false);
       // Navigation will be handled by the auth state listener in RootNavigator
     } catch (error: any) {
@@ -65,14 +65,14 @@ const OTPVerificationScreen = ({ navigation, route }: any) => {
 
   // For development only - bypass authentication
   const handleBypassAuth = () => {
-    dispatch(
-      setMockUser({
-        id: "mock-user-id",
-        phoneNumber: phoneNumber,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      })
-    );
+    // dispatch(
+    //   setMockUser({
+    //     id: "mock-user-id",
+    //     phoneNumber: phoneNumber,
+    //     createdAt: Date.now(),
+    //     updatedAt: Date.now(),
+    //   })
+    // );
   };
 
   return (

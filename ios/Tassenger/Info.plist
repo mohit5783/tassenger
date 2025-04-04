@@ -33,6 +33,12 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
+          <string>com.googleusercontent.apps.634757009406-qrdtqksrokj2q1814u6jklra6j1vdoug</string>
+        </array>
+      </dict>
+      <dict>
+        <key>CFBundleURLSchemes</key>
+        <array>
           <string>exp+tassengerapp</string>
         </array>
       </dict>

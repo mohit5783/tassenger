@@ -310,13 +310,13 @@ const EmailAuthScreen = ({ navigation }: any) => {
           </TouchableOpacity>
 
           {/* Development only button - remove in production */}
-          <Button
+          {/* <Button
             mode="text"
             style={styles.devButton}
             onPress={handleBypassAuth}
           >
             [DEV] Skip Authentication
-          </Button>
+          </Button> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

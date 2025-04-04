@@ -6,7 +6,7 @@ import { Text, Button, TextInput, HelperText } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch } from "../../store/hooks";
 import { updateUserProfile } from "../../store/slices/authSlice";
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
+// import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
 import { app } from "../../api/firebase/config";
 import { PhoneAuthProvider, signInWithCredential } from "firebase/auth";
 import { auth } from "../../api/firebase/config";
@@ -24,7 +24,7 @@ const PhoneVerificationScreen = ({ navigation, route }: any) => {
   const [canResend, setCanResend] = useState(false);
   const [codeError, setCodeError] = useState("");
 
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
+  // const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   useEffect(() => {
     sendVerificationCode();
@@ -47,14 +47,14 @@ const PhoneVerificationScreen = ({ navigation, route }: any) => {
   }, [timer]);
 
   const sendVerificationCode = async () => {
-    if (!recaptchaVerifier.current) return;
+    // if (!recaptchaVerifier.current) return;
 
     setIsSendingCode(true);
     try {
       const provider = new PhoneAuthProvider(auth);
       const verificationId = await provider.verifyPhoneNumber(
         phoneNumber,
-        recaptchaVerifier.current
+        // recaptchaVerifier.current
       );
       setVerificationId(verificationId);
       Alert.alert(
@@ -128,11 +128,11 @@ const PhoneVerificationScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <FirebaseRecaptchaVerifierModal
+      {/* <FirebaseRecaptchaVerifierModal
         ref={recaptchaVerifier}
         firebaseConfig={app.options}
         attemptInvisibleVerification={false}
-      />
+      /> */}
 
       <View style={styles.content}>
         <Text style={[styles.title, { color: theme.colors.primary }]}>

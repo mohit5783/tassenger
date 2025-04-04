@@ -7,7 +7,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { ArrowLeft } from "react-native-feather";
 import { useAppDispatch } from "../../store/hooks";
 import { setMockUser } from "../../store/slices/authSlice";
-import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
+// import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
 import { app } from "../../api/firebase/config";
 import { sendVerificationCode } from "../../services/AuthService";
 
@@ -17,7 +17,7 @@ const PhoneAuthScreen = ({ navigation }: any) => {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [countryCode, setCountryCode] = useState("+91");
   const [isLoading, setIsLoading] = useState(false);
-  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
+  // const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   const handleSendOTP = async () => {
     if (phoneNumber.trim().length < 6) {
@@ -32,7 +32,7 @@ const PhoneAuthScreen = ({ navigation }: any) => {
       // Use the AuthService directly instead of dispatching an action
       const result = await sendVerificationCode(
         fullPhoneNumber,
-        recaptchaVerifier
+        // recaptchaVerifier
       );
 
       setIsLoading(false);
@@ -67,11 +67,11 @@ const PhoneAuthScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <FirebaseRecaptchaVerifierModal
+      {/* <FirebaseRecaptchaVerifierModal
         ref={recaptchaVerifier}
         firebaseConfig={app.options}
         attemptInvisibleVerification={false}
-      />
+      /> */}
 
       <TouchableOpacity style={styles.backButton} onPress={handleBack}>
         <ArrowLeft width={24} height={24} stroke={theme.colors.onBackground} />
