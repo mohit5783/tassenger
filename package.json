@@ -29,7 +29,6 @@
     "expo-contacts": "~14.0.5",
     "expo-dev-client": "~5.0.15",
     "expo-device": "^7.0.2",
-    "expo-firebase-core": "^6.0.0",
     "expo-firebase-recaptcha": "^2.3.1",
     "expo-font": "~13.0.4",
     "expo-image-picker": "~16.0.6",
