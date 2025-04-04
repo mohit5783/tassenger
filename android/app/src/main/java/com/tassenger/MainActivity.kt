@@ -1,4 +1,4 @@
-package com.virtualify.tassenger
+package com.tassenger
 
 import android.os.Build
 import android.os.Bundle
