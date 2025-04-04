@@ -2,23 +2,26 @@
 
 import type React from "react";
 import { useState } from "react";
-import { View, StyleSheet } from "react-native";
-import { Text, Switch, Button } from "react-native-paper";
+import { View, StyleSheet, TouchableOpacity } from "react-native";
+import { Text, Switch, Divider } from "react-native-paper";
 import { useTheme } from "../theme/ThemeProvider";
+import { Bell, Plus } from "react-native-feather";
+
+interface ReminderTime {
+  id: string;
+  days?: number;
+  hours?: number;
+  minutes?: number;
+  label: string;
+}
 
 interface NotificationSettingsProps {
   enabled: boolean;
   onToggle: (enabled: boolean) => void;
-  reminderTimes: Array<{
-    id: string;
-    days?: number;
-    hours?: number;
-    minutes?: number;
-    label: string;
-  }>;
+  reminderTimes: ReminderTime[];
   selectedReminders: string[];
   onSelectReminder: (reminderId: string, selected: boolean) => void;
-  onAddCustomReminder?: () => void;
+  onAddCustomReminder: () => void;
 }
 
 const NotificationSettings: React.FC<NotificationSettingsProps> = ({
@@ -30,61 +33,102 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
   onAddCustomReminder,
 }) => {
   const { theme } = useTheme();
-  const [menuVisible, setMenuVisible] = useState(false);
+  const [expanded, setExpanded] = useState(true);
+
+  const toggleExpanded = () => {
+    if (!enabled) {
+      onToggle(true);
+      setExpanded(true);
+    } else {
+      setExpanded(!expanded);
+    }
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.card }]}>
-      <View style={styles.header}>
-        <Text style={[styles.title, { color: theme.colors.text }]}>
-          Notification Settings
-        </Text>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: theme.dark ? "#1E1E1E" : "#F5F5F5",
+          borderRadius: 12,
+        },
+      ]}
+    >
+      <TouchableOpacity
+        style={styles.headerRow}
+        onPress={toggleExpanded}
+        activeOpacity={0.7}
+      >
+        <View style={styles.headerLeft}>
+          <Bell
+            width={20}
+            height={20}
+            stroke={theme.colors.primary}
+            style={styles.icon}
+          />
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            Notification Settings
+          </Text>
+        </View>
         <Switch
           value={enabled}
-          onValueChange={onToggle}
+          onValueChange={(value) => {
+            onToggle(value);
+            if (value) setExpanded(true);
+          }}
           color={theme.colors.primary}
         />
-      </View>
+      </TouchableOpacity>
 
-      {enabled && (
-        <>
-          <Text style={[styles.subtitle, { color: theme.colors.text }]}>
+      {enabled && expanded && (
+        <View style={styles.expandedContent}>
+          <Divider style={styles.divider} />
+
+          <Text
+            style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}
+          >
             When to remind?
           </Text>
 
-          <View style={styles.remindersList}>
-            {reminderTimes.map((reminder) => (
-              <View
-                key={reminder.id}
-                style={[
-                  styles.reminderItem,
-                  { borderBottomColor: theme.colors.border },
-                ]}
-              >
-                <Text style={{ color: theme.colors.text }}>
-                  {reminder.label}
-                </Text>
-                <Switch
-                  value={selectedReminders.includes(reminder.id)}
-                  onValueChange={(selected) =>
-                    onSelectReminder(reminder.id, selected)
-                  }
-                  color={theme.colors.primary}
-                />
-              </View>
-            ))}
-          </View>
-
-          {onAddCustomReminder && (
-            <Button
-              mode="outlined"
-              onPress={onAddCustomReminder}
-              style={styles.customButton}
-              textColor={theme.colors.text}
+          {reminderTimes.map((reminder) => (
+            <TouchableOpacity
+              key={reminder.id}
+              style={styles.reminderItem}
+              onPress={() =>
+                onSelectReminder(
+                  reminder.id,
+                  !selectedReminders.includes(reminder.id)
+                )
+              }
+              activeOpacity={0.7}
             >
+              <Text style={{ color: theme.colors.text }}>{reminder.label}</Text>
+              <Switch
+                value={selectedReminders.includes(reminder.id)}
+                onValueChange={(selected) =>
+                  onSelectReminder(reminder.id, selected)
+                }
+                color={theme.colors.primary}
+              />
+            </TouchableOpacity>
+          ))}
+
+          <TouchableOpacity
+            style={styles.addCustomButton}
+            onPress={onAddCustomReminder}
+            activeOpacity={0.7}
+          >
+            <Plus
+              width={18}
+              height={18}
+              stroke={theme.colors.primary}
+              style={styles.addIcon}
+            />
+            <Text style={{ color: theme.colors.primary }}>
               Add Custom Reminder
-            </Button>
-          )}
-        </>
+            </Text>
+          </TouchableOpacity>
+        </View>
       )}
     </View>
   );
@@ -92,36 +136,53 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
 
 const styles = StyleSheet.create({
   container: {
-    padding: 16,
-    borderRadius: 8,
-    marginVertical: 8,
+    marginBottom: 16,
+    overflow: "hidden",
   },
-  header: {
+  headerRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 16,
+    padding: 16,
+  },
+  headerLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  icon: {
+    marginRight: 12,
   },
   title: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "bold",
   },
-  subtitle: {
-    fontSize: 16,
-    marginBottom: 12,
+  expandedContent: {
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
-  remindersList: {
-    marginBottom: 16,
+  sectionTitle: {
+    fontSize: 14,
+    marginVertical: 12,
   },
   reminderItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 8,
+    paddingVertical: 12,
     borderBottomWidth: 1,
+    borderBottomColor: "rgba(150, 150, 150, 0.2)",
   },
-  customButton: {
-    marginTop: 8,
+  divider: {
+    marginBottom: 8,
+  },
+  addCustomButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 16,
+    paddingVertical: 12,
+  },
+  addIcon: {
+    marginRight: 8,
   },
 });
 

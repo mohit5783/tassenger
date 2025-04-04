@@ -3,8 +3,14 @@ import type { NavigatorScreenParams } from "@react-navigation/native";
 export type AuthStackParamList = {
   Welcome: undefined;
   PhoneAuth: undefined;
-  OTPVerification: { phoneNumber: string; verificationId: string };
-  SetupProfile: undefined;
+  EmailAuth: undefined;
+  OTPVerification: {
+    phoneNumber: string;
+    verificationId: string;
+    userId?: string;
+    returnScreen?: string;
+  };
+  ProfileCompletion: { userId: string; isNewUser: boolean };
 };
 
 export type TasksStackParamList = {
@@ -45,17 +51,31 @@ export type GroupStackParamList = {
   GroupMembers: { groupId: string };
 };
 
+// Add custom parameters for navigation
+export interface MainTabNavigationParams {
+  screen?: keyof MainTabParamList;
+  params?: any;
+}
+
+export interface TasksNavigationParams {
+  screen?: keyof TasksStackParamList;
+}
+
+export interface ProfileNavigationParams {
+  screen?: keyof ProfileStackParamList;
+}
+
 export type MainTabParamList = {
   Dashboard: undefined;
-  Tasks: NavigatorScreenParams<TasksStackParamList>;
+  Tasks: TasksNavigationParams | undefined;
   Chat: NavigatorScreenParams<ChatStackParamList>;
   Groups: NavigatorScreenParams<GroupStackParamList>;
-  Profile: NavigatorScreenParams<ProfileStackParamList>;
+  Profile: ProfileNavigationParams | undefined;
 };
 
 export type RootStackParamList = {
   Auth: NavigatorScreenParams<AuthStackParamList>;
-  Main: NavigatorScreenParams<MainTabParamList>;
+  Main: MainTabNavigationParams | undefined;
 };
 
 export type ContactsStackParamList = {

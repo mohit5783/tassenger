@@ -18,68 +18,38 @@ import {
   Searchbar,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
-import { useAppSelector } from "../../store/hooks";
-import {
-  requestContactsPermission,
-  getContacts,
-  sendInviteSMS,
-  type Contact,
-} from "../../services/ContactsService";
+import { useAppSelector, useAppDispatch } from "../../store/hooks";
+import { sendInviteSMS, type Contact } from "../../services/ContactsService";
 import { createConversation } from "../../store/slices/chatSlice";
-import { useAppDispatch } from "../../store/hooks";
+import {
+  fetchContacts,
+  setSearchQuery,
+} from "../../store/slices/contactsSlice";
 
 const ContactsScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { contacts, filteredContacts, isLoading, hasPermission, searchQuery } =
+    useAppSelector((state) => state.contacts);
   const [invitingContact, setInvitingContact] = useState<string | null>(null);
+  // Add state for permission request status
+  const [permissionRequested, setPermissionRequested] = useState(false);
+  const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
 
   useEffect(() => {
     loadContacts();
   }, []);
 
-  useEffect(() => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      setFilteredContacts(
-        contacts.filter(
-          (contact) =>
-            contact.name.toLowerCase().includes(query) ||
-            contact.phoneNumber.includes(query)
-        )
-      );
-    } else {
-      setFilteredContacts(contacts);
-    }
-  }, [searchQuery, contacts]);
-
+  // Update the loadContacts function
   const loadContacts = async () => {
-    setIsLoading(true);
-    try {
-      const hasPermission = await requestContactsPermission();
-      if (!hasPermission) {
-        Alert.alert(
-          "Permission Required",
-          "Tassenger needs access to your contacts to help you connect with friends and colleagues.",
-          [{ text: "OK" }]
-        );
-        setIsLoading(false);
-        return;
-      }
+    setPermissionRequested(true);
+    setShowLoadingIndicator(true);
 
-      const contactsList = await getContacts();
-      setContacts(contactsList);
-      setFilteredContacts(contactsList);
-    } catch (error) {
-      console.error("Error loading contacts:", error);
-      Alert.alert("Error", "Failed to load contacts");
-    } finally {
-      setIsLoading(false);
-    }
+    // Add delay to ensure loading indicator is visible
+    setTimeout(() => {
+      dispatch(fetchContacts());
+    }, 500);
   };
 
   const handleContactPress = async (contact: Contact) => {
@@ -133,22 +103,35 @@ const ContactsScreen = ({ navigation }: any) => {
     }
   };
 
+  const handleSearch = (query: string) => {
+    dispatch(setSearchQuery(query));
+  };
+
   const renderContactItem = ({ item }: { item: Contact }) => (
     <TouchableOpacity
       style={styles.contactItem}
       onPress={() => handleContactPress(item)}
     >
-      <Avatar.Text
-        size={50}
-        label={item.name.substring(0, 1).toUpperCase()}
-        style={{
-          backgroundColor: item.hasApp ? theme.colors.primary : "#CCCCCC",
-        }}
-      />
+      {item.photoURL ? (
+        <Avatar.Image size={50} source={{ uri: item.photoURL }} />
+      ) : (
+        <Avatar.Text
+          size={50}
+          label={item.name.substring(0, 1).toUpperCase()}
+          style={{
+            backgroundColor: item.hasApp ? theme.colors.primary : "#CCCCCC",
+          }}
+        />
+      )}
 
       <View style={styles.contactInfo}>
         <Text style={styles.contactName}>{item.name}</Text>
         <Text style={styles.contactPhone}>{item.phoneNumber}</Text>
+        {item.email && (
+          <Text style={styles.contactEmail} numberOfLines={1}>
+            {item.email}
+          </Text>
+        )}
       </View>
 
       {!item.hasApp && (
@@ -175,6 +158,62 @@ const ContactsScreen = ({ navigation }: any) => {
     </View>
   );
 
+  // Replace the permission request section
+  if (!hasPermission) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+          <Appbar.BackAction
+            color={theme.colors.onPrimary}
+            onPress={() => navigation.goBack()}
+          />
+          <Appbar.Content title="Contacts" color={theme.colors.onPrimary} />
+        </Appbar.Header>
+
+        <View style={styles.centered}>
+          {showLoadingIndicator ? (
+            <>
+              <ActivityIndicator size="large" color={theme.colors.primary} />
+              <Text
+                style={{
+                  marginTop: 20,
+                  textAlign: "center",
+                  color: theme.colors.text,
+                }}
+              >
+                Loading contacts...
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text
+                style={{
+                  marginBottom: 20,
+                  textAlign: "center",
+                  color: theme.colors.text,
+                }}
+              >
+                Tassenger needs access to your contacts to help you connect with
+                friends and colleagues.
+              </Text>
+              <Button
+                mode="contained"
+                onPress={loadContacts}
+                buttonColor={theme.colors.primary}
+                disabled={permissionRequested}
+                loading={permissionRequested}
+              >
+                {permissionRequested ? "Loading..." : "Grant Permission"}
+              </Button>
+            </>
+          )}
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
@@ -189,7 +228,7 @@ const ContactsScreen = ({ navigation }: any) => {
 
       <Searchbar
         placeholder="Search contacts"
-        onChangeText={setSearchQuery}
+        onChangeText={handleSearch}
         value={searchQuery}
         style={styles.searchBar}
       />
@@ -251,6 +290,11 @@ const styles = StyleSheet.create({
   contactPhone: {
     fontSize: 14,
     color: "#8E8E93",
+  },
+  contactEmail: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginTop: 2,
   },
   sectionHeader: {
     padding: 8,

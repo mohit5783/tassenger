@@ -1,13 +1,6 @@
-// Feature flags to toggle between real and stubbed implementations
-// Set to true to use stub implementations (works in Expo Go)
-// Set to false to use real native implementations (requires native builds)
-
-export const USE_STUB_SERVICES = true;
-
-// Individual feature flags (all controlled by master flag for now)
-export const USE_STUB_NOTIFICATIONS = USE_STUB_SERVICES;
-export const USE_STUB_AUTH = USE_STUB_SERVICES;
-export const USE_STUB_CONTACTS = USE_STUB_SERVICES;
-
-// You can override individual flags here if needed
-// export const USE_STUB_NOTIFICATIONS = false; // Force real notifications even if other services are stubbed
+// Feature flags for toggling between stub and real implementations
+export const USE_STUB_AUTH = false; // Set to false to use real Firebase auth
+export const USE_EMAIL_AUTH = false; // Set to false to use phone auth instead of email auth
+export const USE_STUB_CONTACTS = false; // Set to false when implementing real contacts
+export const USE_STUB_TASKS = true; // Set to false when implementing real tasks
+export const USE_STUB_CHAT = true; // Set to false when implementing real chat

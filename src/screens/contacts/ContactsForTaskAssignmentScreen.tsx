@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
@@ -15,71 +15,37 @@ import {
   ActivityIndicator,
   Divider,
   Searchbar,
+  Button,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
-import { useAppSelector } from "../../store/hooks";
-import {
-  requestContactsPermission,
-  getContacts,
-  type Contact,
-} from "../../services/ContactsService";
-import { useAppDispatch } from "../../store/hooks";
+import { useAppSelector, useAppDispatch } from "../../store/hooks";
+import type { Contact } from "../../services/ContactsService";
 import { updateTask } from "../../store/slices/taskSlice";
+import {
+  fetchContacts,
+  setSearchQuery,
+} from "../../store/slices/contactsSlice";
 
 const ContactsForTaskAssignmentScreen = ({ navigation, route }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { taskId, returnScreen = "TaskDetail" } = route.params || {};
   const { user } = useAppSelector((state) => state.auth);
-  const [contacts, setContacts] = useState<Contact[]>([]);
-  const [filteredContacts, setFilteredContacts] = useState<Contact[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
+  const { contacts, filteredContacts, isLoading, hasPermission, searchQuery } =
+    useAppSelector((state) => state.contacts);
+  const [permissionRequested, setPermissionRequested] = useState(false);
 
   useEffect(() => {
     loadContacts();
   }, []);
 
-  useEffect(() => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      setFilteredContacts(
-        contacts.filter(
-          (contact) =>
-            contact.name.toLowerCase().includes(query) ||
-            contact.phoneNumber.includes(query)
-        )
-      );
-    } else {
-      setFilteredContacts(contacts);
-    }
-  }, [searchQuery, contacts]);
-
   const loadContacts = async () => {
-    setIsLoading(true);
-    try {
-      const hasPermission = await requestContactsPermission();
-      if (!hasPermission) {
-        Alert.alert(
-          "Permission Required",
-          "Tassenger needs access to your contacts to help you connect with friends and colleagues.",
-          [{ text: "OK" }]
-        );
-        setIsLoading(false);
-        return;
-      }
+    setPermissionRequested(true);
+    dispatch(fetchContacts());
+  };
 
-      const contactsList = await getContacts();
-      // Filter to only show contacts with the app installed
-      const appContacts = contactsList.filter((contact) => contact.hasApp);
-      setContacts(appContacts);
-      setFilteredContacts(appContacts);
-    } catch (error) {
-      console.error("Error loading contacts:", error);
-      Alert.alert("Error", "Failed to load contacts");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSearch = (query: string) => {
+    dispatch(setSearchQuery(query));
   };
 
   const handleContactPress = async (contact: Contact) => {
@@ -110,18 +76,56 @@ const ContactsForTaskAssignmentScreen = ({ navigation, route }: any) => {
       style={styles.contactItem}
       onPress={() => handleContactPress(item)}
     >
-      <Avatar.Text
-        size={50}
-        label={item.name.substring(0, 1).toUpperCase()}
-        style={{ backgroundColor: theme.colors.primary }}
-      />
+      {item.photoURL ? (
+        <Avatar.Image size={50} source={{ uri: item.photoURL }} />
+      ) : (
+        <Avatar.Text
+          size={50}
+          label={item.name.substring(0, 1).toUpperCase()}
+          style={{ backgroundColor: theme.colors.primary }}
+        />
+      )}
 
       <View style={styles.contactInfo}>
         <Text style={styles.contactName}>{item.name}</Text>
         <Text style={styles.contactPhone}>{item.phoneNumber}</Text>
+        {item.email && (
+          <Text style={styles.contactEmail} numberOfLines={1}>
+            {item.email}
+          </Text>
+        )}
       </View>
     </TouchableOpacity>
   );
+
+  // Filter to only show contacts with the app installed
+  const appContacts = filteredContacts.filter((contact) => contact.hasApp);
+
+  if (!hasPermission) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+          <Appbar.BackAction
+            color={theme.colors.onPrimary}
+            onPress={() => navigation.goBack()}
+          />
+          <Appbar.Content title="Assign Task" color={theme.colors.onPrimary} />
+        </Appbar.Header>
+
+        <View style={styles.centered}>
+          <Text style={{ marginBottom: 20, textAlign: "center" }}>
+            Tassenger needs access to your contacts to help you assign tasks to
+            your contacts.
+          </Text>
+          <Button mode="contained" onPress={loadContacts}>
+            Grant Permission
+          </Button>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -135,12 +139,14 @@ const ContactsForTaskAssignmentScreen = ({ navigation, route }: any) => {
         <Appbar.Content title="Assign Task" color={theme.colors.onPrimary} />
       </Appbar.Header>
 
-      <Searchbar
-        placeholder="Search contacts"
-        onChangeText={setSearchQuery}
-        value={searchQuery}
-        style={styles.searchBar}
-      />
+      <View style={styles.searchContainer}>
+        <Searchbar
+          placeholder="Search contacts"
+          onChangeText={handleSearch}
+          value={searchQuery}
+          style={styles.searchBar}
+        />
+      </View>
 
       {isLoading ? (
         <View style={styles.centered}>
@@ -148,7 +154,7 @@ const ContactsForTaskAssignmentScreen = ({ navigation, route }: any) => {
         </View>
       ) : (
         <FlatList
-          data={filteredContacts}
+          data={appContacts}
           renderItem={renderContactItem}
           keyExtractor={(item) => item.id}
           ItemSeparatorComponent={() => <Divider />}
@@ -176,9 +182,15 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
+  },
+  searchContainer: {
+    padding: 8,
+    backgroundColor: "transparent",
   },
   searchBar: {
-    margin: 8,
+    elevation: 0,
+    borderRadius: 8,
   },
   contactItem: {
     flexDirection: "row",
@@ -196,6 +208,11 @@ const styles = StyleSheet.create({
   contactPhone: {
     fontSize: 14,
     color: "#8E8E93",
+  },
+  contactEmail: {
+    fontSize: 12,
+    color: "#8E8E93",
+    marginTop: 2,
   },
   emptyContainer: {
     padding: 32,

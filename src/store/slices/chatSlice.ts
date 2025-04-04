@@ -9,8 +9,10 @@ import {
   where,
   orderBy,
   updateDoc,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "../../api/firebase/config";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 export interface Message {
   id: string;
@@ -19,6 +21,8 @@ export interface Message {
   senderName?: string;
   createdAt: number;
   read: boolean;
+  readBy?: string[]; // Array of user IDs who have read the message
+  readAt?: Record<string, number>; // Timestamp when each user read the message
   attachments?: {
     type: "task" | "image" | "file";
     id?: string;
@@ -41,6 +45,7 @@ export interface Conversation {
   unreadCount?: Record<string, number>;
   title?: string;
   isGroup: boolean;
+  lastMessageReadByAll?: boolean; // Add this property
 }
 
 interface ChatState {
@@ -49,6 +54,7 @@ interface ChatState {
   messages: Message[];
   isLoading: boolean;
   error: string | null;
+  activeListeners: Record<string, () => void>;
 }
 
 const initialState: ChatState = {
@@ -57,6 +63,35 @@ const initialState: ChatState = {
   messages: [],
   isLoading: false,
   error: null,
+  activeListeners: {},
+};
+
+// Cache key for storing conversations locally
+const CONVERSATIONS_CACHE_KEY = "tassenger_conversations_cache";
+
+// Helper function to save conversations to AsyncStorage
+const cacheConversations = async (conversations: Conversation[]) => {
+  try {
+    await AsyncStorage.setItem(
+      CONVERSATIONS_CACHE_KEY,
+      JSON.stringify(conversations)
+    );
+  } catch (error) {
+    console.error("Error caching conversations:", error);
+  }
+};
+
+// Helper function to load cached conversations
+const loadCachedConversations = async (): Promise<Conversation[]> => {
+  try {
+    const cachedData = await AsyncStorage.getItem(CONVERSATIONS_CACHE_KEY);
+    if (cachedData) {
+      return JSON.parse(cachedData);
+    }
+  } catch (error) {
+    console.error("Error loading cached conversations:", error);
+  }
+  return [];
 };
 
 // Create a new conversation
@@ -115,7 +150,7 @@ export const createConversation = createAsyncThunk(
         }, {} as Record<string, number>),
       });
 
-      return {
+      const newConversation = {
         id: conversationRef.id,
         participants,
         participantNames,
@@ -128,6 +163,8 @@ export const createConversation = createAsyncThunk(
           return acc;
         }, {} as Record<string, number>),
       } as Conversation;
+
+      return newConversation;
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to create conversation");
     }
@@ -137,18 +174,53 @@ export const createConversation = createAsyncThunk(
 // Fetch user's conversations
 export const fetchConversations = createAsyncThunk(
   "chat/fetchConversations",
-  async (userId: string, { rejectWithValue }) => {
+  async (userId: string, { rejectWithValue, dispatch }) => {
     try {
+      // First, try to load cached conversations for immediate display
+      const cachedConversations = await loadCachedConversations();
+
+      // Set up real-time listener for conversations
       const q = query(
         collection(db, "conversations"),
         where("participants", "array-contains", userId),
         orderBy("updatedAt", "desc")
       );
 
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map(
-        (doc) => ({ id: doc.id, ...doc.data() } as Conversation)
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const conversations = snapshot.docs.map(
+            (doc) =>
+              ({
+                id: doc.id,
+                ...doc.data(),
+              } as Conversation)
+          );
+
+          // Update Redux store with fresh data
+          dispatch(updateConversationsFromListener(conversations));
+
+          // Cache the conversations
+          cacheConversations(conversations);
+        },
+        (error) => {
+          console.error("Error in conversations listener:", error);
+          // Dispatch an action to update the error state
+          dispatch(
+            setConversationsError(
+              error.message || "Failed to load conversations"
+            )
+          );
+        }
       );
+
+      // Store the unsubscribe function
+      dispatch(
+        setActiveListener({ key: `conversations_${userId}`, unsubscribe })
+      );
+
+      // Return cached conversations initially
+      return cachedConversations;
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to fetch conversations");
     }
@@ -216,6 +288,8 @@ export const sendMessage = createAsyncThunk(
           senderName,
           createdAt: timestamp,
           read: false,
+          readBy: [senderId], // Sender has read their own message
+          readAt: { [senderId]: timestamp }, // When the sender read it
           attachments: safeAttachments,
         }
       );
@@ -244,6 +318,7 @@ export const sendMessage = createAsyncThunk(
           },
           updatedAt: timestamp,
           unreadCount,
+          lastMessageReadByAll: false, // New message is not read by all yet
         });
       }
 
@@ -254,6 +329,8 @@ export const sendMessage = createAsyncThunk(
         senderName,
         createdAt: timestamp,
         read: false,
+        readBy: [senderId],
+        readAt: { [senderId]: timestamp },
         attachments: safeAttachments,
       } as Message;
     } catch (error: any) {
@@ -265,35 +342,54 @@ export const sendMessage = createAsyncThunk(
 // Fetch messages for a conversation
 export const fetchMessages = createAsyncThunk(
   "chat/fetchMessages",
-  async (conversationId: string, { rejectWithValue }) => {
+  async (conversationId: string, { rejectWithValue, dispatch }) => {
     try {
       const q = query(
         collection(db, "conversations", conversationId, "messages"),
         orderBy("createdAt", "asc")
       );
 
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => {
-        const data = doc.data();
-        // Handle different timestamp formats
-        let createdAt = data.createdAt;
+      // Set up real-time listener for messages
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const messages = snapshot.docs.map((doc) => {
+            const data = doc.data();
+            // Handle different timestamp formats
+            let createdAt = data.createdAt;
 
-        // If it's a Firestore timestamp, convert to milliseconds
-        if (createdAt && typeof createdAt.toMillis === "function") {
-          createdAt = createdAt.toMillis();
+            // If it's a Firestore timestamp, convert to milliseconds
+            if (createdAt && typeof createdAt.toMillis === "function") {
+              createdAt = createdAt.toMillis();
+            }
+
+            // If it's undefined, use current time
+            if (createdAt === undefined) {
+              createdAt = Date.now();
+            }
+
+            return {
+              id: doc.id,
+              ...data,
+              createdAt,
+            } as Message;
+          });
+
+          // Update Redux store with fresh messages
+          dispatch(updateMessagesFromListener(messages));
+        },
+        (error) => {
+          console.error("Error in messages listener:", error);
         }
+      );
 
-        // If it's undefined, use current time
-        if (createdAt === undefined) {
-          createdAt = Date.now();
-        }
+      // Store the unsubscribe function
+      dispatch(
+        setActiveListener({ key: `messages_${conversationId}`, unsubscribe })
+      );
 
-        return {
-          id: doc.id,
-          ...data,
-          createdAt,
-        } as Message;
-      });
+      // Return empty array initially - the listener will populate the messages
+      return [];
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to fetch messages");
     }
@@ -319,8 +415,65 @@ export const markMessagesAsRead = createAsyncThunk(
         // Reset unread count for this user
         if (unreadCount[userId] !== undefined) {
           unreadCount[userId] = 0;
-          await updateDoc(conversationRef, { unreadCount });
+
+          // Check if all participants have read the last message
+          const lastMessage = conversationData.lastMessage;
+          if (lastMessage && lastMessage.senderId !== userId) {
+            // Check if all participants have now read the message
+            const allParticipantsRead = Object.keys(unreadCount).every(
+              (participantId) =>
+                unreadCount[participantId] === 0 ||
+                participantId === lastMessage.senderId
+            );
+
+            // Update the conversation with the read status
+            await updateDoc(conversationRef, {
+              unreadCount,
+              lastMessageReadByAll: allParticipantsRead,
+            });
+          } else {
+            await updateDoc(conversationRef, { unreadCount });
+          }
         }
+
+        // Mark all unread messages as read by this user
+        const messagesQuery = query(
+          collection(db, "conversations", conversationId, "messages"),
+          where("readBy", "array-contains", userId),
+          orderBy("createdAt", "desc")
+        );
+
+        const messagesSnapshot = await getDocs(messagesQuery);
+        const readTimestamp = Date.now();
+
+        // Batch update for better performance
+        const batch = messagesSnapshot.docs.map(async (messageDoc) => {
+          const messageData = messageDoc.data();
+          const messageRef = doc(
+            db,
+            "conversations",
+            conversationId,
+            "messages",
+            messageDoc.id
+          );
+
+          // Update readBy array and readAt record
+          const readBy = messageData.readBy || [];
+          if (!readBy.includes(userId)) {
+            readBy.push(userId);
+
+            const readAt = messageData.readAt || {};
+            readAt[userId] = readTimestamp;
+
+            await updateDoc(messageRef, {
+              read: true,
+              readBy,
+              readAt,
+            });
+          }
+        });
+
+        await Promise.all(batch);
       }
 
       return { conversationId, userId };
@@ -361,6 +514,35 @@ const chatSlice = createSlice({
         state.currentConversation = { ...state.currentConversation, ...data };
       }
     },
+    updateConversationsFromListener: (state, action) => {
+      state.conversations = action.payload;
+      state.isLoading = false;
+    },
+    updateMessagesFromListener: (state, action) => {
+      state.messages = action.payload;
+      state.isLoading = false;
+    },
+    setActiveListener: (state, action) => {
+      const { key, unsubscribe } = action.payload;
+      // Clean up previous listener if it exists
+      if (state.activeListeners[key]) {
+        state.activeListeners[key]();
+      }
+      state.activeListeners[key] = unsubscribe;
+    },
+    cleanupListeners: (state) => {
+      // Unsubscribe from all active listeners
+      Object.values(state.activeListeners).forEach((unsubscribe) => {
+        if (typeof unsubscribe === "function") {
+          unsubscribe();
+        }
+      });
+      state.activeListeners = {};
+    },
+    setConversationsError: (state, action) => {
+      state.error = action.payload;
+      state.isLoading = false;
+    },
   },
   extraReducers: (builder) => {
     builder
@@ -392,7 +574,10 @@ const chatSlice = createSlice({
       })
       .addCase(fetchConversations.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.conversations = action.payload;
+        // Only update if we got conversations back
+        if (action.payload.length > 0) {
+          state.conversations = action.payload;
+        }
       })
       .addCase(fetchConversations.rejected, (state, action) => {
         state.isLoading = false;
@@ -453,7 +638,7 @@ const chatSlice = createSlice({
       })
       .addCase(fetchMessages.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.messages = action.payload;
+        // Messages will be populated by the listener
       })
       .addCase(fetchMessages.rejected, (state, action) => {
         state.isLoading = false;
@@ -481,6 +666,19 @@ const chatSlice = createSlice({
         ) {
           state.currentConversation.unreadCount[userId] = 0;
         }
+
+        // Mark messages as read in the state
+        state.messages = state.messages.map((message) => {
+          if (!message.readBy?.includes(userId)) {
+            return {
+              ...message,
+              read: true,
+              readBy: [...(message.readBy || []), userId],
+              readAt: { ...(message.readAt || {}), [userId]: Date.now() },
+            };
+          }
+          return message;
+        });
       });
   },
 });
@@ -490,5 +688,10 @@ export const {
   clearError,
   addMessage,
   updateConversation,
+  updateConversationsFromListener,
+  updateMessagesFromListener,
+  setActiveListener,
+  cleanupListeners,
+  setConversationsError,
 } = chatSlice.actions;
 export default chatSlice.reducer;

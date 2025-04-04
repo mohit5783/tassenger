@@ -1,89 +1,92 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { View, StyleSheet, TouchableOpacity, Alert } from "react-native"
-import { Text, TextInput, Button } from "react-native-paper"
-import { useTheme } from "../../theme/ThemeProvider"
-import { useAppDispatch } from "../../store/hooks"
-import { setMockUser } from "../../store/slices/authSlice"
-import { ArrowLeft } from "react-native-feather"
+import { useState, useEffect } from "react";
+import { View, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { Text, TextInput, Button } from "react-native-paper";
+import { useTheme } from "../../theme/ThemeProvider";
+import { useAppDispatch } from "../../store/hooks";
+import { verifyOTP, setMockUser } from "../../store/slices/authSlice";
+import { ArrowLeft } from "react-native-feather";
 
 const OTPVerificationScreen = ({ navigation, route }: any) => {
-  const { theme } = useTheme()
-  const dispatch = useAppDispatch()
-  const { phoneNumber, verificationId } = route.params
+  const { theme } = useTheme();
+  const dispatch = useAppDispatch();
+  const { phoneNumber, verificationId } = route.params;
 
-  const [otp, setOtp] = useState("")
-  const [timer, setTimer] = useState(60)
-  const [canResend, setCanResend] = useState(false)
-  const [isLoading, setIsLoading] = useState(false)
+  const [otp, setOtp] = useState("");
+  const [timer, setTimer] = useState(60);
+  const [canResend, setCanResend] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    let interval: NodeJS.Timeout;
 
     if (timer > 0) {
       interval = setInterval(() => {
-        setTimer((prevTimer) => prevTimer - 1)
-      }, 1000)
+        setTimer((prevTimer) => prevTimer - 1);
+      }, 1000);
     } else {
-      setCanResend(true)
+      setCanResend(true);
     }
 
     return () => {
-      if (interval) clearInterval(interval)
-    }
-  }, [timer])
+      if (interval) clearInterval(interval);
+    };
+  }, [timer]);
 
   const handleVerifyOTP = async () => {
     if (otp.length !== 6) {
-      Alert.alert("Invalid Code", "Please enter a valid 6-digit code")
-      return
+      Alert.alert("Invalid Code", "Please enter a valid 6-digit code");
+      return;
     }
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     try {
-      // For development, we'll simulate verifying the OTP
-      // In production, you would integrate with Firebase Phone Auth properly
-      setTimeout(() => {
-        setIsLoading(false)
-
-        // Create a mock user
-        dispatch(
-          setMockUser({
-            id: "mock-user-id",
-            phoneNumber: phoneNumber,
-            createdAt: Date.now(),
-            updatedAt: Date.now(),
-          }),
-        )
-      }, 1500)
-    } catch (error) {
-      setIsLoading(false)
-      Alert.alert("Error", "Failed to verify code")
-      console.error("Failed to verify OTP:", error)
+      // Real Firebase OTP verification
+      await dispatch(verifyOTP({ verificationId, otp })).unwrap();
+      setIsLoading(false);
+      // Navigation will be handled by the auth state listener in RootNavigator
+    } catch (error: any) {
+      setIsLoading(false);
+      Alert.alert("Error", error.message || "Failed to verify code");
+      console.error("Failed to verify OTP:", error);
     }
-  }
+  };
 
   const handleResendOTP = () => {
-    // In a real app, you would resend the OTP
-    setTimer(60)
-    setCanResend(false)
-    Alert.alert("OTP Sent", "A new verification code has been sent to your phone")
-  }
+    // In a real app, you would navigate back to PhoneAuthScreen or implement resend logic
+    navigation.goBack();
+  };
 
   const handleBack = () => {
-    navigation.goBack()
-  }
+    navigation.goBack();
+  };
+
+  // For development only - bypass authentication
+  const handleBypassAuth = () => {
+    dispatch(
+      setMockUser({
+        id: "mock-user-id",
+        phoneNumber: phoneNumber,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      })
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
       <TouchableOpacity style={styles.backButton} onPress={handleBack}>
         <ArrowLeft width={24} height={24} stroke={theme.colors.onBackground} />
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.colors.primary }]}>Verification Code</Text>
+        <Text style={[styles.title, { color: theme.colors.primary }]}>
+          Verification Code
+        </Text>
 
         <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
           We've sent a verification code to {phoneNumber}
@@ -110,20 +113,31 @@ const OTPVerificationScreen = ({ navigation, route }: any) => {
         </Button>
 
         <View style={styles.resendContainer}>
-          <Text style={{ color: theme.colors.textSecondary }}>Didn't receive the code?</Text>
+          <Text style={{ color: theme.colors.textSecondary }}>
+            Didn't receive the code?
+          </Text>
 
           {canResend ? (
             <TouchableOpacity onPress={handleResendOTP}>
-              <Text style={{ color: theme.colors.primary, marginLeft: 4 }}>Resend Code</Text>
+              <Text style={{ color: theme.colors.primary, marginLeft: 4 }}>
+                Resend Code
+              </Text>
             </TouchableOpacity>
           ) : (
-            <Text style={{ color: theme.colors.textSecondary, marginLeft: 4 }}>Resend in {timer}s</Text>
+            <Text style={{ color: theme.colors.textSecondary, marginLeft: 4 }}>
+              Resend in {timer}s
+            </Text>
           )}
         </View>
+
+        {/* Development only button - remove in production */}
+        <Button mode="text" style={styles.devButton} onPress={handleBypassAuth}>
+          [DEV] Skip Authentication
+        </Button>
       </View>
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -160,7 +174,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 24,
   },
-})
+  devButton: {
+    marginTop: 16,
+  },
+});
 
-export default OTPVerificationScreen
-
+export default OTPVerificationScreen;

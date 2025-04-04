@@ -1,81 +1,80 @@
 "use client";
 
 import { createContext, useContext, useState, useMemo, useEffect } from "react";
-import { Appearance, type ColorSchemeName } from "react-native";
+import { Appearance } from "react-native";
 import { MD3LightTheme, MD3DarkTheme } from "react-native-paper";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-// App colors
-const appColors = {
-  primary: {
-    light: "#075E54", // Teal green
-    dark: "#128C7E", // Slightly lighter teal for dark mode
-  },
-  secondary: {
-    light: "#25D366", // Light green
-    dark: "#25D366", // Same light green for dark mode
-  },
-  background: {
-    light: "#FFFFFF",
-    dark: "#121212", // Dark background
-  },
-  surface: {
-    light: "#FFFFFF",
-    dark: "#1E1E1E", // Dark surface
-  },
-  text: {
-    light: "#000000",
-    dark: "#FFFFFF", // White text for dark mode
-  },
-  textSecondary: {
-    light: "#5F5F5F",
-    dark: "#AAAAAA", // Light gray text for dark mode
-  },
-  card: {
-    light: "#FFFFFF",
-    dark: "#2C2C2C", // Dark card background
-  },
-  divider: {
-    light: "#E0E0E0",
-    dark: "#333333", // Dark divider
-  },
+// WhatsApp colors - updated to use the correct teal colors
+const whatsappColors = {
+  tealGreen: "#075E54", // WhatsApp primary teal color
+  lightGreen: "#25D366", // WhatsApp accent green color
+  tealGreenDark: "#054C44", // Darker teal for dark mode
+  chatBackground: "#ECE5DD", // WhatsApp chat background
 };
 
-// Task status colors
-const taskStatusColors = {
-  todo: {
-    light: "#E6E6E6",
-    dark: "#444444",
-  },
-  inProgress: {
-    light: "#FFC107",
-    dark: "#FFC107",
-  },
-  completed: {
-    light: "#25D366",
-    dark: "#25D366",
-  },
-  review: {
-    light: "#2196F3",
-    dark: "#2196F3",
-  },
-  pending: {
-    light: "#9C27B0",
-    dark: "#9C27B0",
-  },
-};
+// Settings keys for AsyncStorage
+const THEME_STORAGE_KEY = "tassenger_theme_mode";
+const LARGE_TEXT_KEY = "tassenger_large_text";
+const READ_RECEIPTS_KEY = "tassenger_read_receipts";
+const NOTIFICATIONS_KEY = "tassenger_notifications";
+const SOUND_KEY = "tassenger_notification_sound";
+const TASK_REMINDER_KEY = "tassenger_task_reminder_default";
 
-const ThemeContext = createContext({
+// Default font scale factor
+const LARGE_TEXT_SCALE = 1.2;
+
+interface ThemeContextType {
+  theme: {
+    dark: boolean;
+    colors: {
+      primary: string;
+      background: string;
+      card: string;
+      text: string;
+      textSecondary: string;
+      border: string;
+      notification: string;
+      outline: string;
+      error: string;
+      onPrimary: string;
+      onBackground: string;
+      customColors: {
+        task: {
+          todo: string;
+          inProgress: string;
+          completed: string;
+          review: string;
+          pending: string;
+        };
+      };
+    };
+    fontScale: number;
+  };
+  paperTheme: typeof MD3LightTheme;
+  toggleTheme: () => void;
+  largeText: boolean;
+  toggleLargeText: () => void;
+  readReceipts: boolean;
+  toggleReadReceipts: () => void;
+  notificationsEnabled: boolean;
+  toggleNotifications: () => void;
+  soundEnabled: boolean;
+  toggleSound: () => void;
+  taskReminderDefault: string;
+  setTaskReminderDefault: (value: string) => void;
+}
+
+const defaultContextValue: ThemeContextType = {
   theme: {
     dark: false,
     colors: {
-      primary: appColors.primary.light,
-      secondary: appColors.secondary.light,
-      background: appColors.background.light,
-      surface: appColors.surface.light,
-      text: appColors.text.light,
-      textSecondary: appColors.textSecondary.light,
-      card: appColors.card.light,
-      border: appColors.divider.light,
+      primary: whatsappColors.tealGreen,
+      background: "#FFFFFF",
+      card: "#F0F0F0",
+      text: "#000000",
+      textSecondary: "#5F5F5F",
+      border: "#CCCCCC",
       notification: "#FF453A",
       outline: "#A9A9A9",
       error: "#FF0000",
@@ -83,81 +82,124 @@ const ThemeContext = createContext({
       onBackground: "#000000",
       customColors: {
         task: {
-          todo: taskStatusColors.todo.light,
-          inProgress: taskStatusColors.inProgress.light,
-          completed: taskStatusColors.completed.light,
-          review: taskStatusColors.review.light,
-          pending: taskStatusColors.pending.light,
+          todo: "#E6E6E6",
+          inProgress: "#FFC107",
+          completed: whatsappColors.lightGreen,
+          review: "#2196F3",
+          pending: "#9C27B0",
         },
       },
     },
+    fontScale: 1,
   },
   paperTheme: MD3LightTheme,
   toggleTheme: () => {},
-  colorScheme: "light" as ColorSchemeName,
-});
+  largeText: false,
+  toggleLargeText: () => {},
+  readReceipts: true,
+  toggleReadReceipts: () => {},
+  notificationsEnabled: true,
+  toggleNotifications: () => {},
+  soundEnabled: true,
+  toggleSound: () => {},
+  taskReminderDefault: "1hour",
+  setTaskReminderDefault: () => {},
+};
+
+const ThemeContext = createContext<ThemeContextType>(defaultContextValue);
 
 export const ThemeProvider = ({ children }: any) => {
-  // Use system theme by default
-  const [colorScheme, setColorScheme] = useState<ColorSchemeName>(
-    Appearance.getColorScheme()
+  // Load saved preferences from AsyncStorage
+  const [initialized, setInitialized] = useState(false);
+  const [isDarkTheme, setIsDarkTheme] = useState(
+    Appearance.getColorScheme() === "dark"
   );
-  const isDarkTheme = colorScheme === "dark";
+  const [largeText, setLargeText] = useState(false);
+  const [readReceipts, setReadReceipts] = useState(true);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [taskReminderDefault, setTaskReminderDefault] = useState("1hour");
 
-  // Listen for system theme changes
+  // Load saved preferences on mount
   useEffect(() => {
-    const subscription = Appearance.addChangeListener(({ colorScheme }) => {
-      setColorScheme(colorScheme);
-    });
+    const loadSavedPreferences = async () => {
+      try {
+        // Load theme preference
+        const savedTheme = await AsyncStorage.getItem(THEME_STORAGE_KEY);
+        if (savedTheme !== null) {
+          setIsDarkTheme(savedTheme === "dark");
+        }
 
-    return () => subscription.remove();
+        // Load large text preference
+        const savedLargeText = await AsyncStorage.getItem(LARGE_TEXT_KEY);
+        if (savedLargeText !== null) {
+          setLargeText(savedLargeText === "true");
+        }
+
+        // Load read receipts preference
+        const savedReadReceipts = await AsyncStorage.getItem(READ_RECEIPTS_KEY);
+        if (savedReadReceipts !== null) {
+          setReadReceipts(savedReadReceipts === "true");
+        }
+
+        // Load notifications preference
+        const savedNotifications = await AsyncStorage.getItem(
+          NOTIFICATIONS_KEY
+        );
+        if (savedNotifications !== null) {
+          setNotificationsEnabled(savedNotifications === "true");
+        }
+
+        // Load sound preference
+        const savedSound = await AsyncStorage.getItem(SOUND_KEY);
+        if (savedSound !== null) {
+          setSoundEnabled(savedSound === "true");
+        }
+
+        // Load task reminder default
+        const savedTaskReminder = await AsyncStorage.getItem(TASK_REMINDER_KEY);
+        if (savedTaskReminder !== null) {
+          setTaskReminderDefault(savedTaskReminder);
+        }
+
+        setInitialized(true);
+      } catch (error) {
+        console.error("Error loading saved preferences:", error);
+        setInitialized(true);
+      }
+    };
+
+    loadSavedPreferences();
   }, []);
 
   const theme = useMemo(
     () => ({
       dark: isDarkTheme,
       colors: {
-        primary: isDarkTheme ? appColors.primary.dark : appColors.primary.light,
-        secondary: isDarkTheme
-          ? appColors.secondary.dark
-          : appColors.secondary.light,
-        background: isDarkTheme
-          ? appColors.background.dark
-          : appColors.background.light,
-        surface: isDarkTheme ? appColors.surface.dark : appColors.surface.light,
-        card: isDarkTheme ? appColors.card.dark : appColors.card.light,
-        text: isDarkTheme ? appColors.text.dark : appColors.text.light,
-        textSecondary: isDarkTheme
-          ? appColors.textSecondary.dark
-          : appColors.textSecondary.light,
-        border: isDarkTheme ? appColors.divider.dark : appColors.divider.light,
+        primary: whatsappColors.tealGreen, // Always use teal green for primary
+        background: isDarkTheme ? "#121212" : "#F7F7F7",
+        card: isDarkTheme ? "#1E1E1E" : "#FFFFFF",
+        text: isDarkTheme ? "#FFFFFF" : "#000000",
+        textSecondary: isDarkTheme ? "#A9A9A9" : "#5F5F5F",
+        border: isDarkTheme ? "#333333" : "#CCCCCC",
         notification: "#FF453A",
         outline: isDarkTheme ? "#666666" : "#A9A9A9",
         error: "#FF0000",
-        onPrimary: "#FFFFFF",
+        onPrimary: "#FFFFFF", // White text on primary color
         onBackground: isDarkTheme ? "#FFFFFF" : "#000000",
         customColors: {
           task: {
-            todo: isDarkTheme
-              ? taskStatusColors.todo.dark
-              : taskStatusColors.todo.light,
-            inProgress: isDarkTheme
-              ? taskStatusColors.inProgress.dark
-              : taskStatusColors.inProgress.light,
-            completed: isDarkTheme
-              ? taskStatusColors.completed.dark
-              : taskStatusColors.completed.light,
-            review: isDarkTheme
-              ? taskStatusColors.review.dark
-              : taskStatusColors.review.light,
-            pending: isDarkTheme
-              ? taskStatusColors.pending.dark
-              : taskStatusColors.pending.light,
+            todo: isDarkTheme ? "#333333" : "#E6E6E6",
+            inProgress: "#FFC107",
+            completed: whatsappColors.lightGreen,
+            review: "#2196F3",
+            pending: "#9C27B0",
           },
         },
       },
+      fontScale: largeText ? LARGE_TEXT_SCALE : 1,
     }),
-    [isDarkTheme]
+    [isDarkTheme, largeText]
   );
 
   // Create a Paper theme that matches our custom theme
@@ -170,11 +212,49 @@ export const ThemeProvider = ({ children }: any) => {
               ...MD3DarkTheme.colors,
               primary: theme.colors.primary,
               background: theme.colors.background,
-              surface: theme.colors.surface,
               error: theme.colors.error,
               text: theme.colors.text,
               onPrimary: theme.colors.onPrimary,
-              outline: theme.colors.outline,
+            },
+            fonts: {
+              ...MD3DarkTheme.fonts,
+              // Apply font scaling to all font variants
+              bodyLarge: {
+                ...MD3DarkTheme.fonts.bodyLarge,
+                fontSize: 16 * theme.fontScale,
+              },
+              bodyMedium: {
+                ...MD3DarkTheme.fonts.bodyMedium,
+                fontSize: 14 * theme.fontScale,
+              },
+              bodySmall: {
+                ...MD3DarkTheme.fonts.bodySmall,
+                fontSize: 12 * theme.fontScale,
+              },
+              labelLarge: {
+                ...MD3DarkTheme.fonts.labelLarge,
+                fontSize: 14 * theme.fontScale,
+              },
+              labelMedium: {
+                ...MD3DarkTheme.fonts.labelMedium,
+                fontSize: 12 * theme.fontScale,
+              },
+              labelSmall: {
+                ...MD3DarkTheme.fonts.labelSmall,
+                fontSize: 11 * theme.fontScale,
+              },
+              titleLarge: {
+                ...MD3DarkTheme.fonts.titleLarge,
+                fontSize: 20 * theme.fontScale,
+              },
+              titleMedium: {
+                ...MD3DarkTheme.fonts.titleMedium,
+                fontSize: 16 * theme.fontScale,
+              },
+              titleSmall: {
+                ...MD3DarkTheme.fonts.titleSmall,
+                fontSize: 14 * theme.fontScale,
+              },
             },
           }
         : {
@@ -183,23 +263,144 @@ export const ThemeProvider = ({ children }: any) => {
               ...MD3LightTheme.colors,
               primary: theme.colors.primary,
               background: theme.colors.background,
-              surface: theme.colors.surface,
               error: theme.colors.error,
               text: theme.colors.text,
               onPrimary: theme.colors.onPrimary,
-              outline: theme.colors.outline,
+            },
+            fonts: {
+              ...MD3LightTheme.fonts,
+              // Apply font scaling to all font variants
+              bodyLarge: {
+                ...MD3LightTheme.fonts.bodyLarge,
+                fontSize: 16 * theme.fontScale,
+              },
+              bodyMedium: {
+                ...MD3LightTheme.fonts.bodyMedium,
+                fontSize: 14 * theme.fontScale,
+              },
+              bodySmall: {
+                ...MD3LightTheme.fonts.bodySmall,
+                fontSize: 12 * theme.fontScale,
+              },
+              labelLarge: {
+                ...MD3LightTheme.fonts.labelLarge,
+                fontSize: 14 * theme.fontScale,
+              },
+              labelMedium: {
+                ...MD3LightTheme.fonts.labelMedium,
+                fontSize: 12 * theme.fontScale,
+              },
+              labelSmall: {
+                ...MD3LightTheme.fonts.labelSmall,
+                fontSize: 11 * theme.fontScale,
+              },
+              titleLarge: {
+                ...MD3LightTheme.fonts.titleLarge,
+                fontSize: 20 * theme.fontScale,
+              },
+              titleMedium: {
+                ...MD3LightTheme.fonts.titleMedium,
+                fontSize: 16 * theme.fontScale,
+              },
+              titleSmall: {
+                ...MD3LightTheme.fonts.titleSmall,
+                fontSize: 14 * theme.fontScale,
+              },
             },
           },
     [isDarkTheme, theme]
   );
 
-  const toggleTheme = () => {
-    setColorScheme(isDarkTheme ? "light" : "dark");
+  const toggleTheme = async () => {
+    const newThemeValue = !isDarkTheme;
+    setIsDarkTheme(newThemeValue);
+    try {
+      await AsyncStorage.setItem(
+        THEME_STORAGE_KEY,
+        newThemeValue ? "dark" : "light"
+      );
+    } catch (error) {
+      console.error("Error saving theme preference:", error);
+    }
   };
+
+  const toggleLargeText = async () => {
+    const newValue = !largeText;
+    setLargeText(newValue);
+    try {
+      await AsyncStorage.setItem(LARGE_TEXT_KEY, newValue ? "true" : "false");
+    } catch (error) {
+      console.error("Error saving large text preference:", error);
+    }
+  };
+
+  const toggleReadReceipts = async () => {
+    const newValue = !readReceipts;
+    setReadReceipts(newValue);
+    try {
+      await AsyncStorage.setItem(
+        READ_RECEIPTS_KEY,
+        newValue ? "true" : "false"
+      );
+    } catch (error) {
+      console.error("Error saving read receipts preference:", error);
+    }
+  };
+
+  const toggleNotifications = async () => {
+    const newValue = !notificationsEnabled;
+    setNotificationsEnabled(newValue);
+    try {
+      await AsyncStorage.setItem(
+        NOTIFICATIONS_KEY,
+        newValue ? "true" : "false"
+      );
+    } catch (error) {
+      console.error("Error saving notifications preference:", error);
+    }
+  };
+
+  const toggleSound = async () => {
+    const newValue = !soundEnabled;
+    setSoundEnabled(newValue);
+    try {
+      await AsyncStorage.setItem(SOUND_KEY, newValue ? "true" : "false");
+    } catch (error) {
+      console.error("Error saving sound preference:", error);
+    }
+  };
+
+  const updateTaskReminderDefault = async (value: string) => {
+    setTaskReminderDefault(value);
+    try {
+      await AsyncStorage.setItem(TASK_REMINDER_KEY, value);
+    } catch (error) {
+      console.error("Error saving task reminder preference:", error);
+    }
+  };
+
+  // Don't render until we've loaded preferences
+  if (!initialized) {
+    return null;
+  }
 
   return (
     <ThemeContext.Provider
-      value={{ theme, paperTheme, toggleTheme, colorScheme }}
+      value={{
+        theme,
+        paperTheme,
+        toggleTheme,
+        largeText,
+        toggleLargeText,
+        readReceipts,
+        toggleReadReceipts,
+        notificationsEnabled,
+        toggleNotifications,
+        soundEnabled,
+        toggleSound,
+        taskReminderDefault,
+        setTaskReminderDefault: updateTaskReminderDefault,
+      }}
     >
       {children}
     </ThemeContext.Provider>

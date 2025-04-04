@@ -22,12 +22,12 @@ import {
 } from "../../store/slices/chatSlice";
 import { format, isToday, isYesterday } from "date-fns";
 import { Send, Paperclip } from "react-native-feather";
+import ReadReceipt from "../../components/ReadReceipt";
 import TaskShareModal from "../../components/TaskShareModal";
 import type { Task } from "../../store/slices/taskSlice";
 
 const ConversationDetailScreen = ({ navigation, route }: any) => {
   const { conversationId } = route.params;
-  const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { currentConversation, messages, isLoading } = useAppSelector(
     (state) => state.chat
@@ -44,12 +44,14 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     }
   }, [dispatch, conversationId]);
 
+  const { theme, readReceipts } = useTheme();
+
   useEffect(() => {
-    // Mark messages as read when the conversation is opened
-    if (user && conversationId) {
+    // Mark messages as read when the conversation is opened, but only if read receipts are enabled
+    if (user && conversationId && readReceipts) {
       dispatch(markMessagesAsRead({ conversationId, userId: user.id }));
     }
-  }, [dispatch, conversationId, user]);
+  }, [dispatch, conversationId, user, readReceipts]);
 
   const handleSendMessage = () => {
     if (!messageText.trim() || !user || !currentConversation) return;
@@ -148,6 +150,31 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
       prevDate.getMonth() !== currentDate.getMonth() ||
       prevDate.getFullYear() !== currentDate.getFullYear()
     );
+  };
+
+  // Function to render read receipts
+  const renderReadReceipt = (message: Message) => {
+    if (!readReceipts || message.senderId !== user?.id) return null;
+
+    // Check if all participants have read the message
+    const allParticipantsExceptSender =
+      currentConversation?.participants.filter((id) => id !== user?.id) || [];
+    const allRead = allParticipantsExceptSender.every((participantId) =>
+      message.readBy?.includes(participantId)
+    );
+
+    // Check if at least one participant has read the message
+    const someRead = allParticipantsExceptSender.some((participantId) =>
+      message.readBy?.includes(participantId)
+    );
+
+    if (allRead) {
+      return <ReadReceipt status="read" size={16} />;
+    } else if (someRead) {
+      return <ReadReceipt status="delivered" size={16} />;
+    } else {
+      return <ReadReceipt status="sent" size={16} />;
+    }
   };
 
   const renderMessage = ({ item, index }: { item: Message; index: number }) => {
@@ -273,16 +300,20 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
               </Text>
             )}
 
-            <Text
-              style={[
-                styles.messageTime,
-                isOwnMessage
-                  ? { color: "rgba(255, 255, 255, 0.7)" }
-                  : { color: "rgba(0, 0, 0, 0.5)" },
-              ]}
-            >
-              {formatMessageTime(item.createdAt)}
-            </Text>
+            <View style={styles.messageFooter}>
+              <Text
+                style={[
+                  styles.messageTime,
+                  isOwnMessage
+                    ? { color: "rgba(255, 255, 255, 0.7)" }
+                    : { color: "rgba(0, 0, 0, 0.5)" },
+                ]}
+              >
+                {formatMessageTime(item.createdAt)}
+              </Text>
+
+              {isOwnMessage && renderReadReceipt(item)}
+            </View>
           </View>
         </View>
       </View>
@@ -332,7 +363,9 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
         onLayout={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
-      <View style={styles.inputContainer}>
+      <View
+        style={[styles.inputContainer, { backgroundColor: theme.colors.card }]}
+      >
         <TouchableOpacity
           style={styles.attachButton}
           onPress={() => setShowTaskModal(true)}
@@ -340,12 +373,18 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
           <Paperclip width={24} height={24} stroke={theme.colors.primary} />
         </TouchableOpacity>
 
-        <View style={styles.textInputContainer}>
+        <View
+          style={[
+            styles.textInputContainer,
+            { backgroundColor: theme.dark ? "#333333" : "#F0F0F0" },
+          ]}
+        >
           <RNTextInput
-            style={styles.textInput}
+            style={[styles.textInput, { color: theme.colors.text }]}
             value={messageText}
             onChangeText={setMessageText}
             placeholder="Type a message..."
+            placeholderTextColor={theme.colors.textSecondary}
             multiline
           />
         </View>
@@ -431,10 +470,18 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
   },
+  messageFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginTop: 4,
+  },
   messageTime: {
     fontSize: 10,
-    alignSelf: "flex-end",
-    marginTop: 4,
+    marginRight: 4,
+  },
+  readReceipt: {
+    marginLeft: 4,
   },
   taskAttachment: {
     marginTop: 8,
@@ -454,7 +501,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     padding: 8,
     alignItems: "center",
-    backgroundColor: "white",
     borderTopWidth: 1,
     borderTopColor: "#E0E0E0",
   },
@@ -463,15 +509,17 @@ const styles = StyleSheet.create({
   },
   textInputContainer: {
     flex: 1,
-    backgroundColor: "#F0F0F0",
     borderRadius: 20,
     paddingHorizontal: 12,
     marginHorizontal: 8,
+    justifyContent: "center",
   },
   textInput: {
     maxHeight: 100,
     minHeight: 40,
     fontSize: 16,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   sendButton: {
     width: 40,

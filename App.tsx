@@ -27,8 +27,9 @@ import * as Notifications from "expo-notifications";
 import { store } from "./src/store";
 import { ThemeProvider, useTheme } from "./src/theme/ThemeProvider";
 import RootNavigator from "./src/navigation/RootNavigator";
-import { View, Text } from "react-native";
+import { View, Text, AppState } from "react-native";
 import { registerForPushNotificationsAsync } from "./src/services/NotificationService";
+import { cleanupListeners } from "./src/store/slices/chatSlice";
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -62,8 +63,22 @@ const AppContent = () => {
         }
       });
 
+    // Set up app state listener to clean up Firebase listeners when app goes to background
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextAppState) => {
+        if (nextAppState === "background" || nextAppState === "inactive") {
+          // Clean up Firebase listeners when app goes to background
+          store.dispatch(cleanupListeners());
+        }
+      }
+    );
+
     return () => {
       Notifications.removeNotificationSubscription(responseListener);
+      appStateSubscription.remove();
+      // Clean up Firebase listeners when component unmounts
+      store.dispatch(cleanupListeners());
     };
   }, []);
 

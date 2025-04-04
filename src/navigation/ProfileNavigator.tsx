@@ -10,9 +10,11 @@ import AboutScreen from "../screens/profile/AboutScreen";
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
-const ProfileNavigator = () => {
+const ProfileNavigator = ({ route }: any) => {
+  const initialScreen = route.params?.screen || "ProfileMain";
+
   return (
-    <Stack.Navigator>
+    <Stack.Navigator initialRouteName={initialScreen}>
       <Stack.Screen
         name="ProfileMain"
         component={ProfileScreen}

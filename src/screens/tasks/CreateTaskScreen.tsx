@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import {
+  Modal,
+  Portal,
   Text,
   TextInput,
   Button,
@@ -23,19 +25,22 @@ import {
 import { createRecurringTask } from "../../store/slices/recurrenceSlice";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { isValid } from "date-fns";
-import UserAssignmentModal from "../../components/UserAssignmentModal";
 import NotificationSettings from "../../components/NotificationSettings";
 import CustomReminderModal from "../../components/CustomReminderModal";
+import ContactSelector from "../../components/ContactSelector";
 import { scheduleCustomTaskReminder } from "../../services/NotificationService";
 import { v4 as uuidv4 } from "uuid";
 import RecurrenceSelector from "../../components/RecurrenceSelector";
 import type { RecurrenceOptions } from "../../types/recurrence";
+import type { Contact } from "../../services/ContactsService";
+import { User } from "react-native-feather";
 
 const CreateTaskScreen = ({ navigation, route }: any) => {
-  const { theme } = useTheme();
+  const { theme, taskReminderDefault } = useTheme();
   const dispatch = useAppDispatch();
   const { isLoading } = useAppSelector((state) => state.tasks);
   const { user } = useAppSelector((state) => state.auth);
+  const { contacts } = useAppSelector((state) => state.contacts);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -47,7 +52,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
-  const [assigneeModalVisible, setAssigneeModalVisible] = useState(false);
+  const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
   const [assignedUser, setAssignedUser] = useState<{
     id: string;
     displayName?: string;
@@ -121,6 +126,36 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     }
   }, [route.params]);
 
+  useEffect(() => {
+    // Apply default reminder setting from theme
+    if (dueDate && taskReminderDefault) {
+      // Start with an empty selection
+      const initialReminders: string[] = [];
+
+      // Add the default reminder based on user preference
+      switch (taskReminderDefault) {
+        case "attime":
+          initialReminders.push("at_time");
+          break;
+        case "10min":
+          initialReminders.push("10_min_before");
+          break;
+        case "1hour":
+          initialReminders.push("1_hour_before");
+          break;
+        case "1day":
+          initialReminders.push("1_day_before");
+          break;
+      }
+
+      // Set the selected reminders
+      if (initialReminders.length > 0) {
+        setSelectedReminders(initialReminders);
+        setNotificationsEnabled(true);
+      }
+    }
+  }, [dueDate, taskReminderDefault]);
+
   const handleAddCustomReminder = (
     days: number,
     hours: number,
@@ -167,10 +202,16 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
 
       // If this is a recurring task, use the createRecurringTask action
       if (recurrenceOptions && dueDate) {
+        // Make sure we have a valid endDate if endType is "date"
+        const safeRecurrenceOptions = { ...recurrenceOptions };
+        if (safeRecurrenceOptions.endType !== "date") {
+          delete safeRecurrenceOptions.endDate;
+        }
+
         await dispatch(
           createRecurringTask({
             taskData,
-            recurrenceOptions,
+            recurrenceOptions: safeRecurrenceOptions,
           })
         ).unwrap();
       } else {
@@ -257,21 +298,29 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     }
   };
 
-  const handleUserSelect = (selectedUser: any) => {
-    if (selectedUser) {
+  const handleContactSelect = (contact: Contact) => {
+    if (contact && contact.userId) {
       setAssignedUser({
-        id: selectedUser.id,
-        displayName: selectedUser.displayName || selectedUser.phoneNumber,
+        id: contact.userId,
+        displayName: contact.name,
       });
-    } else {
-      setAssignedUser(null);
     }
+    setContactSelectorVisible(false);
+  };
+
+  const handleOpenContactSelector = () => {
+    setContactSelectorVisible(true);
   };
 
   // Handle recurrence options change
   const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
     setRecurrenceOptions(options);
   };
+
+  // Inside the CreateTaskScreen component
+  const { isLoading: contactsLoading } = useAppSelector(
+    (state) => state.contacts
+  );
 
   return (
     <View
@@ -523,50 +572,54 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
             Assignment
           </Text>
-          <Button
-            mode="outlined"
-            onPress={() => setAssigneeModalVisible(true)}
-            style={styles.assignButton}
-            icon="account-plus"
-            textColor={theme.colors.text}
+          <TouchableOpacity
+            style={[
+              styles.assignmentButton,
+              {
+                backgroundColor: theme.dark ? "#1E1E1E" : "#F5F5F5",
+                borderRadius: 8,
+              },
+            ]}
+            onPress={handleOpenContactSelector}
+            activeOpacity={0.7}
           >
-            {assignedUser
-              ? `Assigned to: ${assignedUser.displayName}`
-              : "Assign to someone"}
-          </Button>
+            <View style={styles.assignmentButtonContent}>
+              <View style={styles.assignmentLeft}>
+                <User
+                  width={20}
+                  height={20}
+                  stroke={theme.colors.primary}
+                  style={styles.assignmentIcon}
+                />
+                <Text style={{ color: theme.colors.text }}>
+                  {assignedUser
+                    ? `Assigned to: ${assignedUser.displayName}`
+                    : "Assign to someone"}
+                </Text>
+              </View>
+              <Text style={{ color: theme.colors.primary }}>Select</Text>
+            </View>
+          </TouchableOpacity>
 
           {/* Only show notifications if not a recurring task */}
-          {!recurrenceOptions && (
-            <>
-              <Text
-                style={[styles.sectionTitle, { color: theme.colors.primary }]}
-              >
-                Notifications
-              </Text>
-              <NotificationSettings
-                enabled={notificationsEnabled}
-                onToggle={setNotificationsEnabled}
-                reminderTimes={[...defaultReminderTimes, ...customReminders]}
-                selectedReminders={selectedReminders}
-                onSelectReminder={(reminderId, selected) => {
-                  if (selected) {
-                    setSelectedReminders([...selectedReminders, reminderId]);
-                  } else {
-                    setSelectedReminders(
-                      selectedReminders.filter((id) => id !== reminderId)
-                    );
-                  }
-                }}
-                onAddCustomReminder={() => setCustomReminderModalVisible(true)}
-              />
-            </>
+          {!recurrenceOptions && dueDate && (
+            <NotificationSettings
+              enabled={notificationsEnabled}
+              onToggle={setNotificationsEnabled}
+              reminderTimes={[...defaultReminderTimes, ...customReminders]}
+              selectedReminders={selectedReminders}
+              onSelectReminder={(reminderId, selected) => {
+                if (selected) {
+                  setSelectedReminders([...selectedReminders, reminderId]);
+                } else {
+                  setSelectedReminders(
+                    selectedReminders.filter((id) => id !== reminderId)
+                  );
+                }
+              }}
+              onAddCustomReminder={() => setCustomReminderModalVisible(true)}
+            />
           )}
-
-          <CustomReminderModal
-            visible={customReminderModalVisible}
-            onDismiss={() => setCustomReminderModalVisible(false)}
-            onSave={handleAddCustomReminder}
-          />
 
           <Button
             mode="contained"
@@ -582,12 +635,37 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
           </Button>
         </View>
       </ScrollView>
-      <UserAssignmentModal
-        visible={assigneeModalVisible}
-        onDismiss={() => setAssigneeModalVisible(false)}
-        onSelectUser={handleUserSelect}
-        currentAssigneeId={assignedUser?.id}
+
+      <CustomReminderModal
+        visible={customReminderModalVisible}
+        onDismiss={() => setCustomReminderModalVisible(false)}
+        onSave={handleAddCustomReminder}
       />
+
+      {/* Important: Only render the Modal when contactSelectorVisible is true */}
+      {contactSelectorVisible && (
+        <Portal>
+          <Modal
+            visible={contactSelectorVisible}
+            onDismiss={() => {
+              // Only allow dismissal if contacts are not loading
+              if (!contactsLoading) {
+                setContactSelectorVisible(false);
+              }
+            }}
+            dismissable={!contactsLoading} // Prevent dismissal while loading
+            contentContainerStyle={styles.modalContainer}
+          >
+            <ContactSelector
+              onSelectContact={handleContactSelect}
+              onCancel={() => {
+                setContactSelectorVisible(false);
+              }}
+              title="Assign Task To"
+            />
+          </Modal>
+        </Portal>
+      )}
     </View>
   );
 };
@@ -654,12 +732,35 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
   },
+  assignmentButton: {
+    marginBottom: 24,
+    overflow: "hidden",
+  },
+  assignmentButtonContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+  },
+  assignmentLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  assignmentIcon: {
+    marginRight: 12,
+  },
   createButton: {
     marginTop: 8,
     paddingVertical: 8,
   },
-  assignButton: {
-    marginBottom: 24,
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "white",
+    margin: 0,
+    padding: 0,
+    width: "100%",
+    height: "100%",
+    borderRadius: 0,
   },
 });
 

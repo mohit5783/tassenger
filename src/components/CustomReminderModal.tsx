@@ -2,8 +2,15 @@
 
 import type React from "react";
 import { useState } from "react";
-import { View, StyleSheet, Modal } from "react-native";
-import { Text, Button, TextInput } from "react-native-paper";
+import { View, StyleSheet } from "react-native";
+import {
+  Modal,
+  Portal,
+  Text,
+  Button,
+  Surface,
+  TextInput,
+} from "react-native-paper";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface CustomReminderModalProps {
@@ -18,26 +25,28 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
   onSave,
 }) => {
   const { theme } = useTheme();
-  const [days, setDays] = useState("0");
-  const [hours, setHours] = useState("0");
-  const [minutes, setMinutes] = useState("0");
+  const [days, setDays] = useState("");
+  const [hours, setHours] = useState("");
+  const [minutes, setMinutes] = useState("");
 
   const handleSave = () => {
     const daysNum = Number.parseInt(days) || 0;
     const hoursNum = Number.parseInt(hours) || 0;
     const minutesNum = Number.parseInt(minutes) || 0;
 
-    // Ensure at least one value is greater than 0
-    if (daysNum > 0 || hoursNum > 0 || minutesNum > 0) {
-      onSave(daysNum, hoursNum, minutesNum);
-      resetForm();
+    if (daysNum === 0 && hoursNum === 0 && minutesNum === 0) {
+      // At least one value must be greater than 0
+      return;
     }
+
+    onSave(daysNum, hoursNum, minutesNum);
+    resetForm();
   };
 
   const resetForm = () => {
-    setDays("0");
-    setHours("0");
-    setMinutes("0");
+    setDays("");
+    setHours("");
+    setMinutes("");
   };
 
   const handleDismiss = () => {
@@ -46,24 +55,23 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent={true}
-      animationType="slide"
-      onRequestClose={handleDismiss}
-    >
-      <View style={styles.centeredView}>
-        <View
-          style={[styles.modalView, { backgroundColor: theme.colors.card }]}
+    <Portal>
+      <Modal
+        visible={visible}
+        onDismiss={handleDismiss}
+        contentContainerStyle={styles.modalContainer}
+      >
+        <Surface
+          style={[
+            styles.modalContent,
+            { backgroundColor: theme.dark ? "#1E1E1E" : "#FFFFFF" },
+          ]}
         >
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
             Custom Reminder
           </Text>
           <Text
-            style={[
-              styles.modalSubtitle,
-              { color: theme.colors.textSecondary },
-            ]}
+            style={[styles.subtitle, { color: theme.colors.textSecondary }]}
           >
             Set a custom time before the due date
           </Text>
@@ -71,13 +79,12 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
           <View style={styles.inputsContainer}>
             <View style={styles.inputGroup}>
               <TextInput
+                style={styles.input}
                 label="Days"
                 value={days}
                 onChangeText={setDays}
                 keyboardType="number-pad"
-                style={styles.input}
                 mode="outlined"
-                theme={{ colors: { text: theme.colors.text } }}
               />
               <Text
                 style={[
@@ -85,19 +92,18 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                Days
+                days
               </Text>
             </View>
 
             <View style={styles.inputGroup}>
               <TextInput
+                style={styles.input}
                 label="Hours"
                 value={hours}
                 onChangeText={setHours}
                 keyboardType="number-pad"
-                style={styles.input}
                 mode="outlined"
-                theme={{ colors: { text: theme.colors.text } }}
               />
               <Text
                 style={[
@@ -105,19 +111,18 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                Hours
+                hours
               </Text>
             </View>
 
             <View style={styles.inputGroup}>
               <TextInput
+                style={styles.input}
                 label="Minutes"
                 value={minutes}
                 onChangeText={setMinutes}
                 keyboardType="number-pad"
-                style={styles.input}
                 mode="outlined"
-                theme={{ colors: { text: theme.colors.text } }}
               />
               <Text
                 style={[
@@ -125,16 +130,16 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                Minutes
+                minutes
               </Text>
             </View>
           </View>
 
           <View style={styles.buttonContainer}>
             <Button
+              mode="outlined"
               onPress={handleDismiss}
               style={styles.button}
-              textColor={theme.colors.text}
             >
               Cancel
             </Button>
@@ -142,74 +147,56 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
               mode="contained"
               onPress={handleSave}
               style={[styles.button, { backgroundColor: theme.colors.primary }]}
-              disabled={
-                Number.parseInt(days) === 0 &&
-                Number.parseInt(hours) === 0 &&
-                Number.parseInt(minutes) === 0
-              }
+              disabled={days === "" && hours === "" && minutes === ""}
             >
               Save
             </Button>
           </View>
-        </View>
-      </View>
-    </Modal>
+        </Surface>
+      </Modal>
+    </Portal>
   );
 };
 
 const styles = StyleSheet.create({
-  centeredView: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalView: {
-    width: "80%",
-    borderRadius: 10,
+  modalContainer: {
     padding: 20,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
   },
-  modalTitle: {
+  modalContent: {
+    padding: 24,
+    borderRadius: 12,
+  },
+  title: {
     fontSize: 20,
     fontWeight: "bold",
     marginBottom: 8,
   },
-  modalSubtitle: {
-    fontSize: 16,
-    marginBottom: 20,
-    opacity: 0.7,
+  subtitle: {
+    fontSize: 14,
+    marginBottom: 24,
   },
   inputsContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 20,
+    marginBottom: 24,
   },
   inputGroup: {
-    flex: 1,
-    marginHorizontal: 4,
+    flexDirection: "row",
     alignItems: "center",
+    marginBottom: 16,
   },
   input: {
-    width: "100%",
+    flex: 1,
+    marginRight: 12,
   },
   inputLabel: {
-    marginTop: 4,
-    fontSize: 12,
+    width: 60,
+    fontSize: 14,
   },
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
   },
   button: {
-    marginLeft: 10,
+    marginLeft: 12,
   },
 });
 

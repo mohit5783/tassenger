@@ -75,12 +75,17 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
     onRecurrenceChange(options);
 
     // Generate preview dates
-    const preview = RecurrenceService.generateOccurrencePreview(
-      options,
-      initialDueDate,
-      3
-    );
-    setPreviewDates(preview);
+    try {
+      const preview = RecurrenceService.generateOccurrencePreview(
+        options,
+        initialDueDate,
+        3
+      );
+      setPreviewDates(preview);
+    } catch (error) {
+      console.error("Error generating preview dates:", error);
+      setPreviewDates([]);
+    }
   }, [
     isRecurring,
     recurrenceType,
@@ -89,7 +94,6 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
     endDate,
     endCount,
     initialDueDate,
-    onRecurrenceChange,
   ]);
 
   // Update default end values when recurrence type changes
@@ -208,7 +212,10 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
               style={styles.frequencyInput}
               keyboardType="number-pad"
               value={frequency.toString()}
-              onChangeText={(text) => setFrequency(Number.parseInt(text) || 1)}
+              onChangeText={(text) => {
+                const value = Number.parseInt(text) || 1;
+                if (value > 0) setFrequency(value);
+              }}
               mode="outlined"
               theme={{ colors: { text: theme.colors.text } }}
             />
@@ -240,13 +247,17 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
                 value="count"
                 status={endType === "count" ? "checked" : "unchecked"}
                 color={theme.colors.primary}
+                onPress={() => setEndType("count")}
               />
               <Text style={{ color: theme.colors.text }}>After</Text>
               <TextInput
                 style={styles.countInput}
                 keyboardType="number-pad"
                 value={endCount.toString()}
-                onChangeText={(text) => setEndCount(Number.parseInt(text) || 1)}
+                onChangeText={(text) => {
+                  const value = Number.parseInt(text) || 1;
+                  if (value > 0) setEndCount(value);
+                }}
                 mode="outlined"
                 disabled={endType !== "count"}
                 theme={{ colors: { text: theme.colors.text } }}
@@ -259,6 +270,7 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
                 value="date"
                 status={endType === "date" ? "checked" : "unchecked"}
                 color={theme.colors.primary}
+                onPress={() => setEndType("date")}
               />
               <Text style={{ color: theme.colors.text }}>On date</Text>
               <Button

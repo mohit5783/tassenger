@@ -3,22 +3,24 @@ import {
   createAsyncThunk,
   type PayloadAction,
 } from "@reduxjs/toolkit";
-// Import the AuthService instead of Firebase directly
-import {
-  sendVerificationCode,
-  verifyCode,
-  signOut as authSignOut,
-  getCurrentUser,
-} from "../../services/AuthService";
-import { doc, setDoc } from "firebase/firestore";
-import { db } from "../../api/firebase/config";
+import * as EmailAuthService from "../../services/EmailAuthService";
+
+// Use the appropriate auth service
+const AuthService = EmailAuthService;
 
 interface UserProfile {
   id: string;
-  phoneNumber: string;
-  displayName?: string;
+  phoneNumber?: string;
   email?: string;
+  displayName?: string;
   photoURL?: string;
+  salutation?: string;
+  sex?: string;
+  occupation?: string;
+  bio?: string;
+  isPhoneVerified?: boolean;
+  phoneVerifiedAt?: number;
+  hasCompletedProfile?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -39,66 +41,74 @@ const initialState: AuthState = {
   error: null,
 };
 
-// Update the sendOTP thunk
-export const sendOTP = createAsyncThunk(
-  "auth/sendOTP",
+// Email auth thunks
+export const signUp = createAsyncThunk(
+  "auth/signUp",
   async (
     {
+      email,
+      password,
+      displayName,
       phoneNumber,
-      recaptchaVerifier,
-    }: { phoneNumber: string; recaptchaVerifier: any },
+      hasCompletedProfile = false,
+    }: {
+      email: string;
+      password: string;
+      displayName?: string;
+      phoneNumber?: string;
+      hasCompletedProfile?: boolean;
+    },
     { rejectWithValue }
   ) => {
     try {
-      const { verificationId } = await sendVerificationCode(
+      const result = await EmailAuthService.signUp(
+        email,
+        password,
+        displayName,
         phoneNumber,
-        recaptchaVerifier
+        hasCompletedProfile
       );
-      return verificationId;
+      return result;
     } catch (error: any) {
-      console.error("Error in sendOTP:", error);
-      return rejectWithValue(
-        error.message || "Failed to send verification code"
-      );
+      console.error("Error in signUp:", error);
+      return rejectWithValue(error.message || "Failed to sign up");
     }
   }
 );
 
-// Update the verifyOTP thunk
-export const verifyOTP = createAsyncThunk(
-  "auth/verifyOTP",
+export const signIn = createAsyncThunk(
+  "auth/signIn",
   async (
-    { verificationId, otp }: { verificationId: string; otp: string },
+    { email, password }: { email: string; password: string },
     { rejectWithValue }
   ) => {
     try {
-      const { user } = await verifyCode(verificationId, otp);
-      return user;
+      const result = await EmailAuthService.signIn(email, password);
+      return result;
     } catch (error: any) {
-      console.error("Error in verifyOTP:", error);
-      return rejectWithValue(error.message || "Failed to verify code");
+      console.error("Error in signIn:", error);
+      return rejectWithValue(error.message || "Failed to sign in");
     }
   }
 );
 
-// Update the signOut thunk
+// Common thunks
 export const signOut = createAsyncThunk(
   "auth/signOut",
   async (_, { rejectWithValue }) => {
     try {
-      await authSignOut();
+      await AuthService.signOut();
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to sign out");
     }
   }
 );
 
-// Update the checkAuth thunk
 export const checkAuth = createAsyncThunk(
   "auth/checkAuth",
   async (_, { rejectWithValue }) => {
     try {
-      const user = await getCurrentUser();
+      const user = await AuthService.getCurrentUser();
       return user;
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to check auth status");
@@ -116,15 +126,7 @@ export const updateUserProfile = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const userRef = doc(db, "users", userId);
-      await setDoc(
-        userRef,
-        {
-          ...data,
-          updatedAt: Date.now(),
-        },
-        { merge: true }
-      );
+      await AuthService.updateUserProfile(userId, data);
       return data;
     } catch (error: any) {
       return rejectWithValue(error.message || "Failed to update user profile");
@@ -151,32 +153,32 @@ const authSlice = createSlice({
   },
   extraReducers: (builder) => {
     builder
-      // Send OTP
-      .addCase(sendOTP.pending, (state) => {
+      // Sign Up
+      .addCase(signUp.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(sendOTP.fulfilled, (state, action) => {
+      .addCase(signUp.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.verificationId = action.payload;
+        // Don't set user or isAuthenticated on signup - user needs to sign in
       })
-      .addCase(sendOTP.rejected, (state, action) => {
+      .addCase(signUp.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       })
 
-      // Verify OTP
-      .addCase(verifyOTP.pending, (state) => {
+      // Sign In
+      .addCase(signIn.pending, (state) => {
         state.isLoading = true;
         state.error = null;
       })
-      .addCase(verifyOTP.fulfilled, (state, action) => {
+      .addCase(signIn.fulfilled, (state, action) => {
         state.isLoading = false;
+        state.user = action.payload.user;
+        // Always set authenticated to true on successful sign in
         state.isAuthenticated = true;
-        state.user = action.payload;
-        state.verificationId = null;
       })
-      .addCase(verifyOTP.rejected, (state, action) => {
+      .addCase(signIn.rejected, (state, action) => {
         state.isLoading = false;
         state.error = action.payload as string;
       })
@@ -201,8 +203,9 @@ const authSlice = createSlice({
       })
       .addCase(checkAuth.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.isAuthenticated = !!action.payload;
         state.user = action.payload;
+        // If user exists, mark as authenticated
+        state.isAuthenticated = !!action.payload;
       })
       .addCase(checkAuth.rejected, (state, action) => {
         state.isLoading = false;
@@ -210,10 +213,18 @@ const authSlice = createSlice({
       })
 
       // Update User Profile
+      .addCase(updateUserProfile.pending, (state) => {
+        state.isLoading = true;
+      })
       .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.isLoading = false;
         if (state.user) {
           state.user = { ...state.user, ...action.payload };
         }
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload as string;
       });
   },
 });

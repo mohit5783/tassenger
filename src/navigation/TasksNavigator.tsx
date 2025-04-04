@@ -6,17 +6,18 @@ import TasksListScreen from "../screens/tasks/TasksListScreen";
 import TaskDetailScreen from "../screens/tasks/TaskDetailScreen";
 import CreateTaskScreen from "../screens/tasks/CreateTaskScreen";
 import EditTaskScreen from "../screens/tasks/EditTaskScreen";
-
+import TaskAnalyticsScreen from "../screens/tasks/TaskAnalyticsScreen";
+import TaskTemplatesScreen from "../screens/tasks/TaskTemplatesScreen";
+import CreateTaskTemplateScreen from "../screens/tasks/CreateTaskTemplateScreen";
 import ContactsForTaskAssignmentScreen from "../screens/contacts/ContactsForTaskAssignmentScreen";
-import TaskAnalyticsScreen from "@/screens/tasks/TaskAnalyticsScreen";
-import TaskTemplatesScreen from "@/screens/tasks/TaskTemplatesScreen";
-import CreateTaskTemplateScreen from "@/screens/tasks/CreateTaskTemplateScreen";
 
 const Stack = createNativeStackNavigator<TasksStackParamList>();
 
-const TasksNavigator = () => {
+const TasksNavigator = ({ route }: any) => {
+  const initialScreen = route.params?.screen || "TasksList";
+
   return (
-    <Stack.Navigator>
+    <Stack.Navigator initialRouteName={initialScreen}>
       <Stack.Screen
         name="TasksList"
         component={TasksListScreen}

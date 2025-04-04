@@ -44,13 +44,18 @@ const UserAssignmentModal = ({
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedUsers, setSelectedUsers] = useState<string[]>([]);
 
+  // Reset state when modal becomes visible
   useEffect(() => {
     if (visible) {
+      setSearchQuery("");
+      setSelectedUsers(currentAssigneeId ? [currentAssigneeId] : []);
       loadUsers();
     }
-  }, [visible]);
+  }, [visible, currentAssigneeId]);
 
+  // Filter users when search query changes
   useEffect(() => {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
@@ -101,8 +106,30 @@ const UserAssignmentModal = ({
     onDismiss();
   };
 
+  const handleUserSelect = (user: UserProfile) => {
+    if (allowMultiple) {
+      // For multiple selection mode
+      const isSelected = selectedUsers.includes(user.id);
+      if (isSelected) {
+        setSelectedUsers(selectedUsers.filter((id) => id !== user.id));
+      } else {
+        setSelectedUsers([...selectedUsers, user.id]);
+      }
+    } else {
+      // For single selection mode
+      onSelectUser(user);
+      onDismiss();
+    }
+  };
+
+  const handleConfirmMultipleSelection = () => {
+    // This would be implemented for multiple selection mode
+    // For now, just dismiss
+    onDismiss();
+  };
+
   const renderUserItem = ({ item }: { item: UserProfile }) => {
-    const isCurrentAssignee = item.id === currentAssigneeId;
+    const isCurrentAssignee = selectedUsers.includes(item.id);
     const isCurrentUser = item.id === currentUser?.id;
     const displayName = item.displayName || item.phoneNumber;
 
@@ -110,38 +137,25 @@ const UserAssignmentModal = ({
       <TouchableOpacity
         style={[
           styles.userItem,
-          isCurrentAssignee && {
-            backgroundColor: theme.dark
-              ? "rgba(255, 255, 255, 0.1)"
-              : "rgba(7, 94, 84, 0.1)",
-          },
+          isCurrentAssignee && { backgroundColor: "rgba(7, 94, 84, 0.1)" },
         ]}
-        onPress={() => {
-          onSelectUser(item);
-          onDismiss();
-        }}
+        onPress={() => handleUserSelect(item)}
       >
         <Avatar.Text
           size={40}
-          label={(displayName.substring(0, 1) || "U").toUpperCase()}
+          label={displayName.substring(0, 1).toUpperCase()}
           style={{
             backgroundColor: isCurrentAssignee
               ? theme.colors.primary
-              : theme.dark
-              ? "#444444"
               : "#CCCCCC",
           }}
         />
 
         <View style={styles.userInfo}>
-          <Text style={[styles.userName, { color: theme.colors.text }]}>
+          <Text style={styles.userName}>
             {displayName} {isCurrentUser ? "(You)" : ""}
           </Text>
-          <Text
-            style={[styles.userPhone, { color: theme.colors.textSecondary }]}
-          >
-            {item.phoneNumber}
-          </Text>
+          <Text style={styles.userPhone}>{item.phoneNumber}</Text>
         </View>
 
         {isCurrentAssignee && (
@@ -171,28 +185,13 @@ const UserAssignmentModal = ({
             { backgroundColor: theme.colors.background },
           ]}
         >
-          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
-            Assign Task
-          </Text>
+          <Text style={styles.modalTitle}>Assign Task</Text>
 
           <Searchbar
             placeholder="Search users..."
             onChangeText={setSearchQuery}
             value={searchQuery}
-            style={[
-              styles.searchBar,
-              { backgroundColor: theme.dark ? "#333333" : "#f5f5f5" },
-            ]}
-            inputStyle={[styles.searchInput, { color: theme.colors.text }]}
-            iconColor={theme.colors.primary}
-            placeholderTextColor={theme.colors.textSecondary}
-            theme={{
-              colors: {
-                text: theme.colors.text,
-                placeholder: theme.colors.textSecondary,
-                primary: theme.colors.primary,
-              },
-            }}
+            style={styles.searchBar}
           />
 
           {isLoading ? (
@@ -207,9 +206,7 @@ const UserAssignmentModal = ({
               style={styles.userList}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text style={{ color: theme.colors.textSecondary }}>
-                    No users found
-                  </Text>
+                  <Text>No users found</Text>
                 </View>
               }
             />
@@ -221,18 +218,23 @@ const UserAssignmentModal = ({
                 mode="outlined"
                 onPress={handleRemoveAssignment}
                 style={styles.removeButton}
-                textColor={theme.colors.error}
               >
                 Remove Assignment
               </Button>
             )}
-            <Button
-              mode="outlined"
-              onPress={onDismiss}
-              textColor={theme.colors.text}
-            >
+            <Button mode="outlined" onPress={onDismiss}>
               Cancel
             </Button>
+
+            {allowMultiple && (
+              <Button
+                mode="contained"
+                onPress={handleConfirmMultipleSelection}
+                style={{ backgroundColor: theme.colors.primary }}
+              >
+                Confirm
+              </Button>
+            )}
           </View>
         </View>
       </Modal>
@@ -257,13 +259,6 @@ const styles = StyleSheet.create({
   },
   searchBar: {
     marginBottom: 16,
-    borderRadius: 8,
-    elevation: 0,
-  },
-  searchInput: {
-    paddingVertical: 0,
-    height: 40,
-    alignSelf: "center",
   },
   userList: {
     flex: 1,
@@ -285,6 +280,7 @@ const styles = StyleSheet.create({
   },
   userPhone: {
     fontSize: 14,
+    color: "#8E8E93",
     marginTop: 2,
   },
   checkmark: {

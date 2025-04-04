@@ -1,50 +1,55 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { View, StyleSheet, TouchableOpacity, Alert } from "react-native"
-import { Text, TextInput, Button } from "react-native-paper"
-import { useTheme } from "../../theme/ThemeProvider"
-import { ArrowLeft } from "react-native-feather"
-import { useAppDispatch } from "../../store/hooks"
-import { setMockUser } from "../../store/slices/authSlice"
+import { useState, useRef } from "react";
+import { View, StyleSheet, TouchableOpacity, Alert } from "react-native";
+import { Text, TextInput, Button } from "react-native-paper";
+import { useTheme } from "../../theme/ThemeProvider";
+import { ArrowLeft } from "react-native-feather";
+import { useAppDispatch } from "../../store/hooks";
+import { setMockUser } from "../../store/slices/authSlice";
+import { FirebaseRecaptchaVerifierModal } from "expo-firebase-recaptcha";
+import { app } from "../../api/firebase/config";
+import { sendVerificationCode } from "../../services/AuthService";
 
 const PhoneAuthScreen = ({ navigation }: any) => {
-  const { theme } = useTheme()
-  const dispatch = useAppDispatch()
-  const [phoneNumber, setPhoneNumber] = useState("")
-  const [countryCode, setCountryCode] = useState("+1")
-  const [isLoading, setIsLoading] = useState(false)
+  const { theme } = useTheme();
+  const dispatch = useAppDispatch();
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [countryCode, setCountryCode] = useState("+91");
+  const [isLoading, setIsLoading] = useState(false);
+  const recaptchaVerifier = useRef<FirebaseRecaptchaVerifierModal>(null);
 
   const handleSendOTP = async () => {
     if (phoneNumber.trim().length < 6) {
-      Alert.alert("Invalid Phone Number", "Please enter a valid phone number")
-      return
+      Alert.alert("Invalid Phone Number", "Please enter a valid phone number");
+      return;
     }
 
-    const fullPhoneNumber = `${countryCode}${phoneNumber}`
-    setIsLoading(true)
+    const fullPhoneNumber = `${countryCode}${phoneNumber}`;
+    setIsLoading(true);
 
     try {
-      // For development, we'll simulate sending an OTP
-      // In production, you would integrate with Firebase Phone Auth properly
-      setTimeout(() => {
-        setIsLoading(false)
-        navigation.navigate("OTPVerification", {
-          phoneNumber: fullPhoneNumber,
-          // This is a mock verification ID
-          verificationId: "mock-verification-id",
-        })
-      }, 1500)
-    } catch (error) {
-      setIsLoading(false)
-      Alert.alert("Error", "Failed to send verification code")
-      console.error("Failed to send OTP:", error)
+      // Use the AuthService directly instead of dispatching an action
+      const result = await sendVerificationCode(
+        fullPhoneNumber,
+        recaptchaVerifier
+      );
+
+      setIsLoading(false);
+      navigation.navigate("OTPVerification", {
+        phoneNumber: fullPhoneNumber,
+        verificationId: result.verificationId,
+      });
+    } catch (error: any) {
+      setIsLoading(false);
+      Alert.alert("Error", error.message || "Failed to send verification code");
+      console.error("Failed to send OTP:", error);
     }
-  }
+  };
 
   const handleBack = () => {
-    navigation.goBack()
-  }
+    navigation.goBack();
+  };
 
   // For development only - bypass authentication
   const handleBypassAuth = () => {
@@ -54,18 +59,28 @@ const PhoneAuthScreen = ({ navigation }: any) => {
         phoneNumber: `${countryCode}${phoneNumber || "1234567890"}`,
         createdAt: Date.now(),
         updatedAt: Date.now(),
-      }),
-    )
-  }
+      })
+    );
+  };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View
+      style={[styles.container, { backgroundColor: theme.colors.background }]}
+    >
+      <FirebaseRecaptchaVerifierModal
+        ref={recaptchaVerifier}
+        firebaseConfig={app.options}
+        attemptInvisibleVerification={false}
+      />
+
       <TouchableOpacity style={styles.backButton} onPress={handleBack}>
         <ArrowLeft width={24} height={24} stroke={theme.colors.onBackground} />
       </TouchableOpacity>
 
       <View style={styles.content}>
-        <Text style={[styles.title, { color: theme.colors.primary }]}>Enter Your Phone Number</Text>
+        <Text style={[styles.title, { color: theme.colors.primary }]}>
+          Enter Your Phone Number
+        </Text>
 
         <Text style={[styles.subtitle, { color: theme.colors.textSecondary }]}>
           We'll send you a verification code to confirm your identity
@@ -107,8 +122,8 @@ const PhoneAuthScreen = ({ navigation }: any) => {
         </Button>
       </View>
     </View>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -151,7 +166,6 @@ const styles = StyleSheet.create({
   devButton: {
     marginTop: 16,
   },
-})
+});
 
-export default PhoneAuthScreen
-
+export default PhoneAuthScreen;

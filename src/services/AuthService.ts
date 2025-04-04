@@ -1,4 +1,12 @@
 import { USE_STUB_AUTH } from "../config/featureFlags";
+import {
+  PhoneAuthProvider,
+  signInWithCredential,
+  signOut as firebaseSignOut,
+  onAuthStateChanged as firebaseOnAuthStateChanged,
+} from "firebase/auth";
+import { auth, db } from "../api/firebase/config";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 
 // Type definitions to match the real API
 interface AuthUser {
@@ -103,39 +111,160 @@ const stubAuth = {
 };
 
 // ========== REAL IMPLEMENTATION ==========
-// This would be the actual implementation using Firebase Auth
-// TODO: Implement real auth service when ready to integrate native modules
+// Real implementation using Firebase Auth
 const realAuth = {
-  // We'll implement these when we're ready to use real auth
-  // For now, they just call the stub methods to avoid errors
   async sendVerificationCode(
     phoneNumber: string,
-    recaptchaVerifier?: any
+    recaptchaVerifier: any
   ): Promise<VerificationResult> {
-    return stubAuth.sendVerificationCode(phoneNumber, recaptchaVerifier);
+    try {
+      const provider = new PhoneAuthProvider(auth);
+      const verificationId = await provider.verifyPhoneNumber(
+        phoneNumber,
+        recaptchaVerifier.current
+      );
+      return { verificationId };
+    } catch (error) {
+      console.error("Error sending verification code:", error);
+      throw error;
+    }
   },
 
   async verifyCode(verificationId: string, code: string): Promise<AuthResult> {
-    return stubAuth.verifyCode(verificationId, code);
+    try {
+      const credential = PhoneAuthProvider.credential(verificationId, code);
+      const userCredential = await signInWithCredential(auth, credential);
+      const firebaseUser = userCredential.user;
+
+      // Check if user profile exists in Firestore
+      const userRef = doc(db, "users", firebaseUser.uid);
+      const userSnap = await getDoc(userRef);
+
+      let userProfile: AuthUser;
+      let isNewUser = false;
+
+      if (userSnap.exists()) {
+        // User exists, return profile
+        userProfile = userSnap.data() as AuthUser;
+      } else {
+        // Create new user profile
+        isNewUser = true;
+        const timestamp = Date.now();
+        userProfile = {
+          id: firebaseUser.uid,
+          phoneNumber: firebaseUser.phoneNumber || "",
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        };
+
+        await setDoc(userRef, userProfile);
+      }
+
+      return { user: userProfile, isNewUser };
+    } catch (error) {
+      console.error("Error verifying code:", error);
+      throw error;
+    }
   },
 
   async getCurrentUser(): Promise<AuthUser | null> {
-    return stubAuth.getCurrentUser();
+    return new Promise((resolve, reject) => {
+      const unsubscribe = firebaseOnAuthStateChanged(
+        auth,
+        async (user) => {
+          unsubscribe();
+
+          if (!user) {
+            resolve(null);
+            return;
+          }
+
+          try {
+            // Get user profile from Firestore
+            const userRef = doc(db, "users", user.uid);
+            const userSnap = await getDoc(userRef);
+
+            if (userSnap.exists()) {
+              resolve(userSnap.data() as AuthUser);
+            } else {
+              // Create new user profile if it doesn't exist
+              const timestamp = Date.now();
+              const userProfile: AuthUser = {
+                id: user.uid,
+                phoneNumber: user.phoneNumber || "",
+                createdAt: timestamp,
+                updatedAt: timestamp,
+              };
+
+              await setDoc(userRef, userProfile);
+              resolve(userProfile);
+            }
+          } catch (error) {
+            reject(error);
+          }
+        },
+        reject
+      );
+    });
   },
 
   async updateUserProfile(
     userId: string,
     updates: Partial<AuthUser>
   ): Promise<void> {
-    return stubAuth.updateUserProfile(userId, updates);
+    try {
+      const userRef = doc(db, "users", userId);
+      await updateDoc(userRef, {
+        ...updates,
+        updatedAt: Date.now(),
+      });
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      throw error;
+    }
   },
 
   async signOut(): Promise<void> {
-    return stubAuth.signOut();
+    try {
+      await firebaseSignOut(auth);
+    } catch (error) {
+      console.error("Error signing out:", error);
+      throw error;
+    }
   },
 
   onAuthStateChanged(callback: (user: AuthUser | null) => void): () => void {
-    return stubAuth.onAuthStateChanged(callback);
+    return firebaseOnAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        callback(null);
+        return;
+      }
+
+      try {
+        // Get user profile from Firestore
+        const userRef = doc(db, "users", firebaseUser.uid);
+        const userSnap = await getDoc(userRef);
+
+        if (userSnap.exists()) {
+          callback(userSnap.data() as AuthUser);
+        } else {
+          // Create new user profile if it doesn't exist
+          const timestamp = Date.now();
+          const userProfile: AuthUser = {
+            id: firebaseUser.uid,
+            phoneNumber: firebaseUser.phoneNumber || "",
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          };
+
+          await setDoc(userRef, userProfile);
+          callback(userProfile);
+        }
+      } catch (error) {
+        console.error("Error in auth state change handler:", error);
+        callback(null);
+      }
+    });
   },
 };
 
