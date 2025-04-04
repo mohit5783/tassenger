@@ -1,9 +1,11 @@
 export type TaskGroupStatus =
   | "assigned"
   | "inProgress"
-  | "submitted"
+  | "doneByAssignee"
+  | "pendingReview"
+  | "reviewRejected"
   | "reviewed"
-  | "reopened";
+  | "completed";
 
 export interface TaskAssignment {
   assigneeId: string;

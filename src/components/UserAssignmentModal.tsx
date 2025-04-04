@@ -137,7 +137,12 @@ const UserAssignmentModal = ({
       <TouchableOpacity
         style={[
           styles.userItem,
-          isCurrentAssignee && { backgroundColor: "rgba(7, 94, 84, 0.1)" },
+          isCurrentAssignee && {
+            backgroundColor: theme.dark
+              ? "rgba(7, 94, 84, 0.3)"
+              : "rgba(7, 94, 84, 0.1)",
+          },
+          { borderBottomColor: theme.dark ? "#333" : "#E0E0E0" },
         ]}
         onPress={() => handleUserSelect(item)}
       >
@@ -147,15 +152,21 @@ const UserAssignmentModal = ({
           style={{
             backgroundColor: isCurrentAssignee
               ? theme.colors.primary
+              : theme.dark
+              ? "#444"
               : "#CCCCCC",
           }}
         />
 
         <View style={styles.userInfo}>
-          <Text style={styles.userName}>
+          <Text style={[styles.userName, { color: theme.colors.text }]}>
             {displayName} {isCurrentUser ? "(You)" : ""}
           </Text>
-          <Text style={styles.userPhone}>{item.phoneNumber}</Text>
+          <Text
+            style={[styles.userPhone, { color: theme.colors.textSecondary }]}
+          >
+            {item.phoneNumber}
+          </Text>
         </View>
 
         {isCurrentAssignee && (
@@ -185,13 +196,18 @@ const UserAssignmentModal = ({
             { backgroundColor: theme.colors.background },
           ]}
         >
-          <Text style={styles.modalTitle}>Assign Task</Text>
+          <Text style={[styles.modalTitle, { color: theme.colors.text }]}>
+            Assign Task
+          </Text>
 
           <Searchbar
             placeholder="Search users..."
             onChangeText={setSearchQuery}
             value={searchQuery}
             style={styles.searchBar}
+            inputStyle={{ color: theme.colors.text }}
+            iconColor={theme.colors.primary}
+            theme={{ colors: { text: theme.colors.text } }}
           />
 
           {isLoading ? (
@@ -206,7 +222,9 @@ const UserAssignmentModal = ({
               style={styles.userList}
               ListEmptyComponent={
                 <View style={styles.emptyContainer}>
-                  <Text>No users found</Text>
+                  <Text style={{ color: theme.colors.textSecondary }}>
+                    No users found
+                  </Text>
                 </View>
               }
             />

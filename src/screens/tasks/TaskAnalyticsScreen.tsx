@@ -145,12 +145,13 @@ const TaskAnalyticsScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Task Analytics" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Task Analytics" color="white"
+ />
       </Appbar.Header>
 
       <ScrollView contentContainerStyle={styles.content}>

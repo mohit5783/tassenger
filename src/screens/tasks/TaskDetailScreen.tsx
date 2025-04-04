@@ -20,6 +20,7 @@ import {
   Portal,
   Dialog,
   Switch,
+  TextInput,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -28,6 +29,8 @@ import {
   deleteTask,
   updateTask,
   type TaskStatus,
+  updateTaskStatus,
+  fetchTaskRejections,
 } from "../../store/slices/taskSlice";
 import { generateNextOccurrence } from "../../store/slices/recurrenceSlice";
 import { format, isValid } from "date-fns";
@@ -56,6 +59,10 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     null
   );
   const [assigneeModalVisible, setAssigneeModalVisible] = useState(false);
+  const [rejectionDialogVisible, setRejectionDialogVisible] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [rejections, setRejections] = useState<any[]>([]);
+  const { currentGroup } = useAppSelector((state) => state.groups);
 
   useEffect(() => {
     dispatch(fetchTask(taskId));
@@ -71,6 +78,19 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       }
     }
   }, [currentTask]);
+
+  useEffect(() => {
+    if (taskId && currentTask?.status === "reviewRejected") {
+      dispatch(fetchTaskRejections(taskId))
+        .unwrap()
+        .then((data) => {
+          setRejections(data);
+        })
+        .catch((error) => {
+          console.error("Error fetching rejections:", error);
+        });
+    }
+  }, [dispatch, taskId, currentTask?.status]);
 
   const handleDelete = () => {
     Alert.alert("Delete Task", "Are you sure you want to delete this task?", [
@@ -323,6 +343,42 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     navigation.navigate("ContactsForTaskAssignment", { taskId });
   };
 
+  const handleUpdateGroupTaskStatus = async (
+    newStatus: TaskStatus,
+    reason?: string
+  ) => {
+    if (!currentTask) return;
+
+    try {
+      await dispatch(
+        updateTaskStatus({
+          taskId,
+          newStatus,
+          rejectionReason: reason,
+        })
+      ).unwrap();
+
+      // If we're rejecting, close the dialog
+      if (newStatus === "reviewRejected") {
+        setRejectionDialogVisible(false);
+        setRejectionReason("");
+      }
+    } catch (error) {
+      console.error("Failed to update task status:", error);
+      Alert.alert("Error", "Failed to update task status");
+    }
+  };
+
+  // Add this function to handle rejection
+  const handleRejectTask = () => {
+    if (!rejectionReason.trim()) {
+      Alert.alert("Error", "Please provide a reason for rejection");
+      return;
+    }
+
+    handleUpdateGroupTaskStatus("reviewRejected", rejectionReason.trim());
+  };
+
   if (isLoading || !currentTask) {
     return (
       <View
@@ -347,12 +403,13 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Task Details" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Task Details" color="white"
+ />
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
@@ -699,6 +756,128 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               Completed
             </Button>
           </View>
+          {currentTask.groupId && (
+            <View style={styles.groupTaskActions}>
+              <Text
+                style={[styles.sectionTitle, { color: theme.colors.primary }]}
+              >
+                Group Task Workflow
+              </Text>
+
+              {/* Assignee Actions */}
+              {currentTask.assignment?.assigneeId === user?.id && (
+                <View style={styles.workflowButtons}>
+                  {currentTask.status === "assigned" && (
+                    <Button
+                      mode="contained"
+                      onPress={() => handleUpdateGroupTaskStatus("inProgress")}
+                      style={styles.workflowButton}
+                    >
+                      Start Working
+                    </Button>
+                  )}
+
+                  {currentTask.status === "inProgress" && (
+                    <Button
+                      mode="contained"
+                      onPress={() =>
+                        handleUpdateGroupTaskStatus("doneByAssignee")
+                      }
+                      style={styles.workflowButton}
+                    >
+                      Mark as Done
+                    </Button>
+                  )}
+
+                  {currentTask.status === "reviewRejected" && (
+                    <Button
+                      mode="contained"
+                      onPress={() =>
+                        handleUpdateGroupTaskStatus("doneByAssignee")
+                      }
+                      style={styles.workflowButton}
+                    >
+                      Submit Again
+                    </Button>
+                  )}
+                </View>
+              )}
+
+              {/* Reviewer Actions */}
+              {currentTask.assignment?.reviewerId === user?.id && (
+                <View style={styles.workflowButtons}>
+                  {currentTask.status === "doneByAssignee" && (
+                    <>
+                      <Button
+                        mode="contained"
+                        onPress={() => handleUpdateGroupTaskStatus("reviewed")}
+                        style={[
+                          styles.workflowButton,
+                          { backgroundColor: theme.colors.primary },
+                        ]}
+                      >
+                        Approve
+                      </Button>
+
+                      <Button
+                        mode="contained"
+                        onPress={() => setRejectionDialogVisible(true)}
+                        style={[
+                          styles.workflowButton,
+                          { backgroundColor: theme.colors.error },
+                        ]}
+                      >
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                </View>
+              )}
+
+              {/* Admin Actions */}
+              {currentGroup?.createdBy === user?.id && (
+                <View style={styles.workflowButtons}>
+                  {currentTask.status === "reviewed" && (
+                    <Button
+                      mode="contained"
+                      onPress={() => handleUpdateGroupTaskStatus("completed")}
+                      style={styles.workflowButton}
+                    >
+                      Mark as Completed
+                    </Button>
+                  )}
+                </View>
+              )}
+
+              {/* Rejection History */}
+              {rejections.length > 0 && (
+                <View style={styles.rejectionsContainer}>
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      { color: theme.colors.primary },
+                    ]}
+                  >
+                    Rejection History
+                  </Text>
+                  {rejections.map((rejection, index) => (
+                    <View key={index} style={styles.rejectionItem}>
+                      <Text style={styles.rejectionHeader}>
+                        Rejected by {rejection.reviewerName} on{" "}
+                        {formatDate(
+                          rejection.timestamp,
+                          "MMM d, yyyy 'at' h:mm a"
+                        )}
+                      </Text>
+                      <Text style={styles.rejectionReason}>
+                        {rejection.reason}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         <View
@@ -753,6 +932,32 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
             <Button onPress={handleNewChat} textColor={theme.colors.primary}>
               New Chat
             </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+      {/* Rejection Dialog */}
+      <Portal>
+        <Dialog
+          visible={rejectionDialogVisible}
+          onDismiss={() => setRejectionDialogVisible(false)}
+        >
+          <Dialog.Title>Reject Task</Dialog.Title>
+          <Dialog.Content>
+            <TextInput
+              mode="outlined"
+              label="Reason for rejection"
+              value={rejectionReason}
+              onChangeText={setRejectionReason}
+              multiline
+              numberOfLines={4}
+              style={{ marginTop: 8 }}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setRejectionDialogVisible(false)}>
+              Cancel
+            </Button>
+            <Button onPress={handleRejectTask}>Reject</Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
@@ -859,6 +1064,35 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "#f0f0f0",
+  },
+  groupTaskActions: {
+    marginTop: 16,
+  },
+  workflowButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  workflowButton: {
+    flex: 1,
+    marginHorizontal: 4,
+  },
+  rejectionsContainer: {
+    marginTop: 16,
+  },
+  rejectionItem: {
+    backgroundColor: "rgba(255, 0, 0, 0.05)",
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  rejectionHeader: {
+    fontWeight: "bold",
+    marginBottom: 4,
+  },
+  rejectionReason: {
+    fontStyle: "italic",
   },
 });
 

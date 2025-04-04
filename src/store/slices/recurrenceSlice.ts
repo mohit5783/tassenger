@@ -62,22 +62,31 @@ export const createRecurringTask = createAsyncThunk(
       const taskId = taskResult.id;
       const timestamp = Date.now();
 
+      // Create the recurrence pattern with proper handling of endDate
+      const patternData: any = {
+        type: recurrenceOptions.type,
+        frequency: recurrenceOptions.frequency,
+        endType: recurrenceOptions.endType,
+        createdBy: taskData.createdBy,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+        taskTemplateId: taskId,
+      };
+
+      // Only add endDate if it exists and convert it to timestamp
+      if (recurrenceOptions.endType === "date" && recurrenceOptions.endDate) {
+        patternData.endDate = recurrenceOptions.endDate.getTime();
+      }
+
+      // Only add endCount if it exists
+      if (recurrenceOptions.endType === "count" && recurrenceOptions.endCount) {
+        patternData.endCount = recurrenceOptions.endCount;
+      }
+
       // Create the recurrence pattern
       const patternRef = await addDoc(
         collection(db, "taskRecurrencePatterns"),
-        {
-          type: recurrenceOptions.type,
-          frequency: recurrenceOptions.frequency,
-          endType: recurrenceOptions.endType,
-          endDate: recurrenceOptions.endDate
-            ? recurrenceOptions.endDate.getTime()
-            : undefined,
-          endCount: recurrenceOptions.endCount,
-          createdBy: taskData.createdBy,
-          createdAt: timestamp,
-          updatedAt: timestamp,
-          taskTemplateId: taskId,
-        }
+        patternData
       );
 
       // Update the task with the recurrence pattern ID
@@ -93,17 +102,7 @@ export const createRecurringTask = createAsyncThunk(
 
       return {
         id: patternRef.id,
-        type: recurrenceOptions.type,
-        frequency: recurrenceOptions.frequency,
-        endType: recurrenceOptions.endType,
-        endDate: recurrenceOptions.endDate
-          ? recurrenceOptions.endDate.getTime()
-          : undefined,
-        endCount: recurrenceOptions.endCount,
-        createdBy: taskData.createdBy,
-        createdAt: timestamp,
-        updatedAt: timestamp,
-        taskTemplateId: taskId,
+        ...patternData,
       } as RecurrencePattern;
     } catch (error: any) {
       return rejectWithValue(

@@ -19,7 +19,11 @@ import {
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { fetchTasks, type Task } from "../../store/slices/taskSlice";
+import {
+  fetchTasks,
+  clearFilters,
+  type Task,
+} from "../../store/slices/taskSlice";
 import { format, isValid } from "date-fns";
 import TaskSearchBar from "../../components/TaskSearchBar";
 import { ArrowDown, ArrowUp } from "react-native-feather";
@@ -39,7 +43,13 @@ const TasksListScreen = ({ navigation }: any) => {
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [sortedTasks, setSortedTasks] = useState<Task[]>([]);
 
+  // Add this at the beginning of the component to ensure
+  // we're clearing any group filters when viewing all tasks
+
   useEffect(() => {
+    // Clear any group filters when the task list screen mounts
+    dispatch(clearFilters());
+
     if (user) {
       loadTasks();
     }
@@ -60,6 +70,12 @@ const TasksListScreen = ({ navigation }: any) => {
     searchQuery,
     activeFilters,
   ]);
+
+  // Add this useEffect to ensure the main task list shows all tasks when it mounts:
+  useEffect(() => {
+    // Clear any group filters when the task list screen loads
+    dispatch(clearFilters());
+  }, [dispatch]);
 
   const loadTasks = async () => {
     if (user) {
@@ -100,13 +116,9 @@ const TasksListScreen = ({ navigation }: any) => {
             completed: 5,
           };
           const aStatus =
-            a.status in statusValues
-              ? statusValues[a.status as keyof typeof statusValues]
-              : 0;
+            statusValues[a.status as keyof typeof statusValues] || 0;
           const bStatus =
-            b.status in statusValues
-              ? statusValues[b.status as keyof typeof statusValues]
-              : 0;
+            statusValues[b.status as keyof typeof statusValues] || 0;
           return direction === "asc" ? aStatus - bStatus : bStatus - aStatus;
 
         case "createdAt":
@@ -175,9 +187,56 @@ const TasksListScreen = ({ navigation }: any) => {
     navigation.navigate("TaskDetail", { taskId });
   };
 
+  const getDaysRemaining = (dueDate: number): string => {
+    const now = new Date();
+    const due = new Date(dueDate);
+
+    // If due date is in the past, show "Late"
+    if (due < now) {
+      return "Late";
+    }
+
+    // Calculate days difference
+    const diffTime = Math.abs(due.getTime() - now.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // If less than 1 day, show "Today"
+    if (diffDays === 0) {
+      return "Today";
+    }
+
+    // Return days remaining
+    return `${diffDays}d`;
+  };
+
+  const getDueDateColor = (dueDate: number): string => {
+    const now = new Date();
+    const due = new Date(dueDate);
+
+    // If due date is in the past, show red
+    if (due < now) {
+      return "#FF3B30"; // Red
+    }
+
+    // Calculate days difference
+    const diffTime = Math.abs(due.getTime() - now.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    // If less than 3 days, show yellow
+    if (diffDays < 3) {
+      return "#FFCC00"; // Yellow
+    }
+
+    // Otherwise show green
+    return "#34C759"; // Green
+  };
+
   const renderTaskItem = ({ item }: { item: Task }) => (
     <TouchableOpacity
-      style={[styles.taskItem, { backgroundColor: theme.colors.card }]}
+      style={[
+        styles.taskItem,
+        { backgroundColor: theme.dark ? theme.colors.card : "white" },
+      ]}
       onPress={() => handleTaskPress(item.id)}
     >
       <View style={styles.taskContainer}>
@@ -188,10 +247,7 @@ const TasksListScreen = ({ navigation }: any) => {
         />
         <View style={styles.taskContent}>
           <View style={styles.taskHeader}>
-            <Text
-              style={[styles.taskTitle, { color: theme.colors.text }]}
-              numberOfLines={1}
-            >
+            <Text style={[styles.taskTitle, { color: theme.colors.text }]}>
               {item.title}
             </Text>
             {item.dueDate && (
@@ -212,16 +268,23 @@ const TasksListScreen = ({ navigation }: any) => {
             >
               {item.description || `${item.priority} priority task`}
             </Text>
-            {item.tags && item.tags.length > 0 && (
-              <Badge style={{ backgroundColor: theme.colors.primary }}>
-                {item.tags.length}
+            {item.dueDate && (
+              <Badge
+                style={{
+                  backgroundColor: getDueDateColor(item.dueDate),
+                }}
+              >
+                {getDaysRemaining(item.dueDate)}
               </Badge>
             )}
           </View>
         </View>
       </View>
       <View
-        style={[styles.divider, { backgroundColor: theme.colors.border }]}
+        style={[
+          styles.divider,
+          { backgroundColor: theme.dark ? "#333333" : "#E0E0E0" },
+        ]}
       />
     </TouchableOpacity>
   );
@@ -273,21 +336,14 @@ const TasksListScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.title, { color: theme.colors.onPrimary }]}>
-          Tasks
-        </Text>
+      <View style={[styles.header, { backgroundColor: "black" }]}>
+        <Text style={[styles.title, { color: "white" }]}>Tasks</Text>
       </View>
 
       <TaskSearchBar />
 
-      <View
-        style={[
-          styles.sortContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Text style={[styles.sortLabel, { color: theme.colors.text }]}>
+      <View style={styles.sortContainer}>
+        <Text style={{ marginRight: 8, color: theme.colors.text }}>
           Sort by:
         </Text>
         <Menu
@@ -298,7 +354,6 @@ const TasksListScreen = ({ navigation }: any) => {
               mode="outlined"
               onPress={() => setSortMenuVisible(true)}
               style={styles.sortButton}
-              textColor={theme.colors.text}
               icon="sort"
             >
               {getSortOptionLabel(sortOption)}
@@ -342,7 +397,7 @@ const TasksListScreen = ({ navigation }: any) => {
         <TouchableOpacity
           style={[
             styles.sortDirectionButton,
-            { borderColor: theme.colors.border },
+            { borderColor: theme.dark ? "#444444" : "#e0e0e0" },
           ]}
           onPress={toggleSortDirection}
         >
@@ -379,7 +434,6 @@ const TasksListScreen = ({ navigation }: any) => {
       <FAB
         style={[styles.fab, { backgroundColor: theme.colors.primary }]}
         icon="plus"
-        color={theme.colors.onPrimary}
         onPress={() => navigation.navigate("CreateTask")}
       />
     </View>
@@ -409,9 +463,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
   },
-  sortLabel: {
-    marginRight: 8,
-  },
   sortButton: {
     flex: 1,
     marginRight: 8,
@@ -425,7 +476,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   taskItem: {
-    marginBottom: 1, // Small gap between items
+    // backgroundColor is applied dynamically in the component
   },
   taskContainer: {
     flexDirection: "row",
@@ -445,11 +496,11 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    flex: 1,
-    marginRight: 8,
+    // color is applied dynamically in the component
   },
   taskTime: {
     fontSize: 12,
+    // color is applied dynamically in the component
   },
   taskPreview: {
     flexDirection: "row",
@@ -458,10 +509,12 @@ const styles = StyleSheet.create({
   },
   taskDescription: {
     fontSize: 14,
+    // color is applied dynamically in the component
     flex: 1,
   },
   divider: {
     height: 1,
+    // backgroundColor is applied dynamically in the component
     marginLeft: 76,
   },
   fab: {

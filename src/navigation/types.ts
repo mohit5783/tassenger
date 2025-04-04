@@ -49,6 +49,8 @@ export type GroupStackParamList = {
   CreateGroupTask: { groupId: string };
   GroupTaskDetail: { taskId: string; groupId: string };
   GroupMembers: { groupId: string };
+  EditGroup: { groupId: string };
+  AddGroupMembers: { groupId: string };
 };
 
 // Add custom parameters for navigation

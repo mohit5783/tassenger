@@ -18,6 +18,7 @@ import type {
   TaskRejection,
 } from "../../types/group";
 
+// Update the TaskStatus type to include group statuses
 export type TaskStatus =
   | "todo"
   | "inProgress"
@@ -34,7 +35,7 @@ export type TaskCategory =
   | "finance"
   | "other";
 
-// Enhanced Task interface with group-related fields and recurring task properties
+// Update the Task interface to include group-related fields
 export interface Task {
   id: string;
   title: string;
@@ -337,7 +338,7 @@ export const updateTaskStatus = createAsyncThunk(
       }
 
       // Record a task rejection if the status is being changed to reopened
-      if (newStatus === "reopened" && rejectionReason) {
+      if (newStatus === "reviewRejected" && rejectionReason) {
         const rejectionRef = await addDoc(
           collection(db, "tasks", taskId, "rejections"),
           {
@@ -524,18 +525,23 @@ const taskSlice = createSlice({
     // Add new reducer to filter tasks by group
     filterTasksByGroup: (state, action) => {
       const groupId = action.payload;
+
+      // First, clear any existing filters to start fresh
+      // This is important to prevent filter persistence between screens
+      state.activeFilters = {};
+
       if (groupId) {
+        // When viewing a group, only show tasks with this exact groupId
         state.activeFilters.groupId = [groupId];
         state.filteredTasks = state.tasks.filter(
-          (task) => task.groupId === groupId
+          (task) =>
+            // Ensure the task has a groupId and it matches the requested groupId
+            task.groupId && task.groupId === groupId
         );
       } else {
+        // When not filtering by group, show all tasks
         delete state.activeFilters.groupId;
-        state.filteredTasks = filterTasks(
-          state.tasks,
-          state.searchQuery,
-          state.activeFilters
-        );
+        state.filteredTasks = [...state.tasks];
       }
     },
   },

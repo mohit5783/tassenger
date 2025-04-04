@@ -44,10 +44,8 @@ const ProfileScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.headerTitle, { color: theme.colors.onPrimary }]}>
-          Profile
-        </Text>
+      <View style={[styles.header, { backgroundColor: "black" }]}>
+        <Text style={[styles.headerTitle, { color: "white" }]}>Profile</Text>
       </View>
 
       <ScrollView>

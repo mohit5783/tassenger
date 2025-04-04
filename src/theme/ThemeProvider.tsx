@@ -176,7 +176,8 @@ export const ThemeProvider = ({ children }: any) => {
     () => ({
       dark: isDarkTheme,
       colors: {
-        primary: whatsappColors.tealGreen, // Always use teal green for primary
+        // Use neon green for primary color in dark mode, teal in light mode
+        primary: isDarkTheme ? "#39FF14" : whatsappColors.tealGreen,
         background: isDarkTheme ? "#121212" : "#F7F7F7",
         card: isDarkTheme ? "#1E1E1E" : "#FFFFFF",
         text: isDarkTheme ? "#FFFFFF" : "#000000",
@@ -185,15 +186,15 @@ export const ThemeProvider = ({ children }: any) => {
         notification: "#FF453A",
         outline: isDarkTheme ? "#666666" : "#A9A9A9",
         error: "#FF0000",
-        onPrimary: "#FFFFFF", // White text on primary color
+        onPrimary: isDarkTheme ? "#000000" : "#FFFFFF", // Black text on neon green for better contrast in dark mode
         onBackground: isDarkTheme ? "#FFFFFF" : "#000000",
         customColors: {
           task: {
-            todo: isDarkTheme ? "#333333" : "#E6E6E6",
-            inProgress: "#FFC107",
-            completed: whatsappColors.lightGreen,
-            review: "#2196F3",
-            pending: "#9C27B0",
+            todo: isDarkTheme ? "#6B7280" : "#9CA3AF", // Gray that works in both themes
+            inProgress: isDarkTheme ? "#FFCC00" : "#FFC107", // Yellow for in-progress
+            completed: isDarkTheme ? "#50FF50" : whatsappColors.lightGreen, // Keep the green for completed
+            review: isDarkTheme ? "#39FF14" : "#2196F3",
+            pending: isDarkTheme ? "#CCFF00" : "#9C27B0",
           },
         },
       },

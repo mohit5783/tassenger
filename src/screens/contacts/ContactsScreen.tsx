@@ -164,12 +164,13 @@ const ContactsScreen = ({ navigation }: any) => {
       <View
         style={[styles.container, { backgroundColor: theme.colors.background }]}
       >
-        <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+        <Appbar.Header style={{ backgroundColor: "black" }}>
           <Appbar.BackAction
-            color={theme.colors.onPrimary}
+            color="white"
             onPress={() => navigation.goBack()}
           />
-          <Appbar.Content title="Contacts" color={theme.colors.onPrimary} />
+          <Appbar.Content title="Contacts" color="white"
+ />
         </Appbar.Header>
 
         <View style={styles.centered}>
@@ -218,12 +219,13 @@ const ContactsScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Contacts" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Contacts" color="white"
+ />
       </Appbar.Header>
 
       <Searchbar

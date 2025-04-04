@@ -36,6 +36,8 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
   const [messageText, setMessageText] = useState("");
   const [showTaskModal, setShowTaskModal] = useState(false);
   const flatListRef = useRef<FlatList>(null);
+  // Add this state at the top with other state variables
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     if (conversationId) {
@@ -53,18 +55,32 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     }
   }, [dispatch, conversationId, user, readReceipts]);
 
+  // Replace the handleSendMessage function with this version:
   const handleSendMessage = () => {
-    if (!messageText.trim() || !user || !currentConversation) return;
+    if (!messageText.trim() || !user || !currentConversation || isSending)
+      return;
+
+    const text = messageText.trim();
+    setMessageText(""); // Clear input immediately
+    setIsSending(true);
 
     dispatch(
       sendMessage({
         conversationId,
-        text: messageText.trim(),
+        text,
         senderId: user.id,
         senderName: user.displayName || user.phoneNumber || "User",
       })
-    );
-    setMessageText("");
+    )
+      .unwrap()
+      .catch((error) => {
+        console.error("Error sending message:", error);
+        // Optionally restore the message text if sending fails
+        // setMessageText(text);
+      })
+      .finally(() => {
+        setIsSending(false);
+      });
   };
 
   const handleShareTask = (task: Task) => {
@@ -221,12 +237,22 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                     styles.ownMessageBubble,
                     { backgroundColor: theme.colors.primary },
                   ]
-                : styles.otherMessageBubble,
+                : [
+                    styles.otherMessageBubble,
+                    { backgroundColor: theme.dark ? "#333333" : "#F0F0F0" },
+                  ],
               hasTaskAttachment && styles.taskMessageBubble,
             ]}
           >
             {!isOwnMessage && item.senderName && (
-              <Text style={styles.senderName}>{item.senderName}</Text>
+              <Text
+                style={[
+                  styles.senderName,
+                  { color: theme.dark ? "#FFFFFF" : "#000000" },
+                ]}
+              >
+                {item.senderName}
+              </Text>
             )}
 
             {hasTaskAttachment ? (
@@ -236,7 +262,7 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                     styles.messageText,
                     isOwnMessage
                       ? { color: theme.colors.onPrimary }
-                      : { color: theme.colors.text },
+                      : { color: theme.dark ? "#FFFFFF" : theme.colors.text },
                   ]}
                 >
                   {item.text}
@@ -256,6 +282,8 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                             {
                               backgroundColor: isOwnMessage
                                 ? "rgba(255, 255, 255, 0.1)"
+                                : theme.dark
+                                ? "#444444"
                                 : "#f0f0f0",
                             },
                           ]}
@@ -265,7 +293,11 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                               styles.taskTitle,
                               isOwnMessage
                                 ? { color: theme.colors.onPrimary }
-                                : { color: theme.colors.text },
+                                : {
+                                    color: theme.dark
+                                      ? "#FFFFFF"
+                                      : theme.colors.text,
+                                  },
                             ]}
                           >
                             {attachment.name || "View Task"}
@@ -293,7 +325,7 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                   styles.messageText,
                   isOwnMessage
                     ? { color: theme.colors.onPrimary }
-                    : { color: theme.colors.text },
+                    : { color: theme.dark ? "#FFFFFF" : theme.colors.text },
                 ]}
               >
                 {item.text}
@@ -305,8 +337,12 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
                 style={[
                   styles.messageTime,
                   isOwnMessage
-                    ? { color: "rgba(255, 255, 255, 0.7)" }
-                    : { color: "rgba(0, 0, 0, 0.5)" },
+                    ? { color: "#000000" } // Darker color for timestamps on green bubbles
+                    : {
+                        color: theme.dark
+                          ? "rgba(255, 255, 255, 0.7)"
+                          : "rgba(0, 0, 0, 0.5)",
+                      },
                 ]}
               >
                 {formatMessageTime(item.createdAt)}
@@ -340,22 +376,16 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
-        <Appbar.BackAction
-          color={theme.colors.onPrimary}
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content
-          title={getConversationTitle()}
-          color={theme.colors.onPrimary}
-        />
+      <Appbar.Header style={{ backgroundColor: "black" }}>
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title={getConversationTitle()} color="white" />
       </Appbar.Header>
 
       <FlatList
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, index) => `message-${item.id}-${index}`}
         contentContainerStyle={styles.messagesList}
         onContentSizeChange={() =>
           flatListRef.current?.scrollToEnd({ animated: true })
@@ -455,7 +485,6 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 4,
   },
   otherMessageBubble: {
-    backgroundColor: "#F0F0F0",
     borderBottomLeftRadius: 4,
   },
   taskMessageBubble: {

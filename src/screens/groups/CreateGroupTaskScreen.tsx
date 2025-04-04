@@ -1,55 +1,139 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Alert, Modal } from "react-native";
 import {
   Text,
-  Appbar,
   TextInput,
   Button,
+  Appbar,
+  Chip,
   Menu,
-  Divider,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { createGroupTask, fetchTasks } from "../../store/slices/taskSlice";
-import { fetchGroup } from "../../store/slices/groupSlice";
+import {
+  createGroupTask,
+  type TaskPriority,
+  type TaskCategory,
+  type TaskStatus,
+} from "../../store/slices/taskSlice";
+import { createRecurringTask } from "../../store/slices/recurrenceSlice";
+import { fetchGroup } from "../../store/slices/groupsSlice";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { isValid } from "date-fns";
+import ContactSelector from "../../components/ContactSelector";
+import type { Contact } from "../../services/ContactsService";
+import RecurrenceSelector from "../../components/RecurrenceSelector";
+import type { RecurrenceOptions } from "../../types/recurrence";
 
-interface CreateGroupTaskScreenProps {
-  navigation: any;
-  route: any;
-}
-
-const CreateGroupTaskScreen = ({
-  navigation,
-  route,
-}: CreateGroupTaskScreenProps) => {
+const CreateGroupTaskScreen = ({ navigation, route }: any) => {
   const { groupId } = route.params;
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { isLoading } = useAppSelector((state) => state.tasks);
-  const { currentGroup } = useAppSelector((state) => state.groups);
   const { user } = useAppSelector((state) => state.auth);
+  const { currentGroup, isLoading: groupLoading } = useAppSelector(
+    (state) => state.groups
+  );
+  const { isLoading } = useAppSelector((state) => state.tasks);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
+  const [priority, setPriority] = useState<TaskPriority>("medium");
+  const [category, setCategory] = useState<TaskCategory>("other");
+  const [tags, setTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
-
-  // For assignees and reviewers selection
-  const [assigneeSelectVisible, setAssigneeSelectVisible] = useState(false);
-  const [reviewerSelectVisible, setReviewerSelectVisible] = useState(false);
-  const [selectedAssignee, setSelectedAssignee] = useState<any>(null);
-  const [selectedReviewer, setSelectedReviewer] = useState<any>(null);
+  const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
+  const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
+  const [reviewerSelectorVisible, setReviewerSelectorVisible] = useState(false);
+  const [assignee, setAssignee] = useState<{
+    id: string;
+    displayName?: string;
+  } | null>(null);
+  const [reviewer, setReviewer] = useState<{
+    id: string;
+    displayName?: string;
+  } | null>(null);
+  const [recurrenceOptions, setRecurrenceOptions] =
+    useState<RecurrenceOptions | null>(null);
 
   useEffect(() => {
     if (groupId) {
       dispatch(fetchGroup(groupId));
     }
   }, [dispatch, groupId]);
+
+  const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
+    setRecurrenceOptions(options);
+  };
+
+  const handleCreateTask = async () => {
+    if (!title.trim() || !user || !assignee) {
+      Alert.alert(
+        "Error",
+        "Please fill in all required fields and assign the task to a group member"
+      );
+      return;
+    }
+
+    try {
+      // If this is a recurring task, use the createRecurringTask action
+      if (recurrenceOptions && dueDate) {
+        // Create the task data object
+        const taskData = {
+          title,
+          description,
+          priority,
+          category,
+          tags,
+          status: "assigned" as TaskStatus,
+          createdBy: user.id,
+          dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
+          groupId,
+          assigneeId: assignee.id,
+          assigneeName: assignee.displayName,
+          reviewerId: reviewer?.id,
+          reviewerName: reviewer?.displayName,
+        };
+
+        // Keep the original recurrenceOptions with Date object intact
+        // The createRecurringTask action will handle the conversion internally
+        await dispatch(
+          createRecurringTask({
+            taskData,
+            recurrenceOptions: recurrenceOptions,
+          })
+        ).unwrap();
+      } else {
+        // Otherwise create a regular group task
+        await dispatch(
+          createGroupTask({
+            title,
+            description,
+            priority,
+            category,
+            tags,
+            status: "assigned", // Add the missing status property
+            createdBy: user.id,
+            dueDate:
+              dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
+            groupId,
+            assigneeId: assignee.id,
+            assigneeName: assignee.displayName,
+            reviewerId: reviewer?.id,
+            reviewerName: reviewer?.displayName,
+          })
+        ).unwrap();
+      }
+
+      navigation.goBack();
+    } catch (error) {
+      console.error("Failed to create group task:", error);
+      Alert.alert("Error", "Failed to create task. Please try again.");
+    }
+  };
 
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
@@ -58,67 +142,98 @@ const CreateGroupTaskScreen = ({
     }
   };
 
-  const handleCreateTask = async () => {
-    if (!title.trim() || !user || !currentGroup || !selectedAssignee) return;
-
-    try {
-      await dispatch(
-        createGroupTask({
-          title,
-          description,
-          priority,
-          category: "work", // Default for group tasks
-          status: "assigned", // Add this line to fix the error
-          createdBy: user.id,
-          groupId,
-          assigneeId: selectedAssignee.userId,
-          assigneeName: selectedAssignee.userName,
-          reviewerId: selectedReviewer?.userId,
-          reviewerName: selectedReviewer?.userName,
-          dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
-        })
-      ).unwrap();
-
-      await dispatch(fetchTasks(user.id));
-      navigation.goBack();
-    } catch (error) {
-      console.error("Failed to create task:", error);
+  const handleAddTag = () => {
+    if (newTag.trim() && !tags.includes(newTag.trim())) {
+      setTags([...tags, newTag.trim()]);
+      setNewTag("");
     }
   };
 
-  // Filter out current user from assignee/reviewer lists
-  const getGroupMembers = () => {
-    if (!currentGroup) return [];
-    // For assignee, show all members
-    return currentGroup.members.filter((member) => member.userId !== user?.id);
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTags(tags.filter((tag) => tag !== tagToRemove));
   };
 
-  // Filter to only show admins for reviewers
-  const getReviewers = () => {
-    if (!currentGroup) return [];
-    return currentGroup.members.filter(
-      (member) =>
-        member.userId !== user?.id && member.userId !== selectedAssignee?.userId
-    );
+  const getCategoryColor = (cat: TaskCategory): string => {
+    switch (cat) {
+      case "work":
+        return "#4285F4"; // Blue
+      case "personal":
+        return "#EA4335"; // Red
+      case "shopping":
+        return "#FBBC05"; // Yellow
+      case "health":
+        return "#34A853"; // Green
+      case "finance":
+        return "#8E24AA"; // Purple
+      default:
+        return "#757575"; // Gray
+    }
   };
+
+  const handleContactSelect = (contact: Contact) => {
+    if (contact && contact.userId) {
+      setAssignee({
+        id: contact.userId,
+        displayName: contact.name,
+      });
+    }
+    setContactSelectorVisible(false);
+  };
+
+  const handleReviewerSelect = (contact: Contact) => {
+    if (contact && contact.userId) {
+      setReviewer({
+        id: contact.userId,
+        displayName: contact.name,
+      });
+    }
+    setReviewerSelectorVisible(false);
+  };
+
+  if (groupLoading || !currentGroup) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: theme.colors.background }]}
+      >
+        <Appbar.Header style={{ backgroundColor: "black" }}>
+          <Appbar.BackAction
+            color="white"
+            onPress={() => navigation.goBack()}
+          />
+          <Appbar.Content
+            title="Create Group Task"
+            color={theme.colors.onPrimary}
+          />
+        </Appbar.Header>
+        <View style={styles.centered}>
+          <Text>Loading group...</Text>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
         <Appbar.Content
-          title="Create Group Task"
+          title={`New Task for ${currentGroup.name}`}
           color={theme.colors.onPrimary}
         />
       </Appbar.Header>
 
       <ScrollView style={styles.content}>
-        <View style={styles.formCard}>
+        <View
+          style={[
+            styles.formCard,
+            { backgroundColor: theme.dark ? theme.colors.card : "white" },
+          ]}
+        >
           <TextInput
             style={styles.input}
             mode="outlined"
@@ -137,37 +252,168 @@ const CreateGroupTaskScreen = ({
             numberOfLines={4}
           />
 
-          <Text style={styles.sectionTitle}>Task Assignment</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Assignment
+          </Text>
+          <Button
+            mode="outlined"
+            onPress={() => setContactSelectorVisible(true)}
+            style={styles.assignButton}
+            icon="account-outline"
+            textColor={theme.colors.text}
+            buttonColor={theme.dark ? theme.colors.background : undefined}
+          >
+            {assignee
+              ? `Assigned to: ${assignee.displayName}`
+              : "Assign to Group Member"}
+          </Button>
 
-          <View style={styles.assignmentSection}>
-            <Text style={styles.label}>Assignee (Required):</Text>
-            <Button
-              mode="outlined"
-              onPress={() => setAssigneeSelectVisible(true)}
-              style={styles.selectButton}
-            >
-              {selectedAssignee ? selectedAssignee.userName : "Select Assignee"}
-            </Button>
+          <Button
+            mode="outlined"
+            onPress={() => setReviewerSelectorVisible(true)}
+            style={styles.assignButton}
+            icon="account-check-outline"
+            textColor={theme.colors.text}
+            buttonColor={theme.dark ? theme.colors.background : undefined}
+          >
+            {reviewer
+              ? `Reviewer: ${reviewer.displayName}`
+              : "Add Reviewer (Optional)"}
+          </Button>
 
-            <Text style={styles.label}>Reviewer (Optional):</Text>
-            <Button
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Category
+          </Text>
+          <Menu
+            visible={categoryMenuVisible}
+            onDismiss={() => setCategoryMenuVisible(false)}
+            anchor={
+              <Button
+                mode="outlined"
+                onPress={() => setCategoryMenuVisible(true)}
+                style={[
+                  styles.categoryButton,
+                  { borderColor: getCategoryColor(category) },
+                ]}
+                labelStyle={{ color: getCategoryColor(category) }}
+                buttonColor={theme.dark ? theme.colors.background : undefined}
+              >
+                {category.charAt(0).toUpperCase() + category.slice(1)}
+              </Button>
+            }
+          >
+            <Menu.Item
+              title="Work"
+              onPress={() => {
+                setCategory("work");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="briefcase"
+            />
+            <Menu.Item
+              title="Personal"
+              onPress={() => {
+                setCategory("personal");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="account"
+            />
+            <Menu.Item
+              title="Shopping"
+              onPress={() => {
+                setCategory("shopping");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="cart"
+            />
+            <Menu.Item
+              title="Health"
+              onPress={() => {
+                setCategory("health");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="heart"
+            />
+            <Menu.Item
+              title="Finance"
+              onPress={() => {
+                setCategory("finance");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="cash"
+            />
+            <Menu.Item
+              title="Other"
+              onPress={() => {
+                setCategory("other");
+                setCategoryMenuVisible(false);
+              }}
+              leadingIcon="dots-horizontal"
+            />
+          </Menu>
+
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: theme.colors.primary, marginTop: 16 },
+            ]}
+          >
+            Tags
+          </Text>
+          <View style={styles.tagsContainer}>
+            {tags.map((tag, index) => (
+              <Chip
+                key={index}
+                style={styles.tagChip}
+                onClose={() => handleRemoveTag(tag)}
+              >
+                {tag}
+              </Chip>
+            ))}
+          </View>
+          <View style={styles.tagInputContainer}>
+            <TextInput
+              style={styles.tagInput}
               mode="outlined"
-              onPress={() => setReviewerSelectVisible(true)}
-              style={styles.selectButton}
-              disabled={!selectedAssignee}
+              label="Add Tag"
+              value={newTag}
+              onChangeText={setNewTag}
+              theme={{
+                colors: {
+                  text: theme.colors.text,
+                  background: theme.dark ? theme.colors.background : undefined,
+                },
+              }}
+            />
+            <Button
+              mode="contained"
+              onPress={handleAddTag}
+              style={styles.addTagButton}
+              disabled={!newTag.trim()}
+              buttonColor={theme.colors.primary}
             >
-              {selectedReviewer ? selectedReviewer.userName : "Select Reviewer"}
+              Add
             </Button>
           </View>
 
-          <Divider style={styles.divider} />
-
-          <Text style={styles.sectionTitle}>Priority</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Priority
+          </Text>
           <View style={styles.priorityContainer}>
             <Button
               mode={priority === "low" ? "contained" : "outlined"}
               onPress={() => setPriority("low")}
               style={styles.priorityButton}
+              buttonColor={
+                priority === "low"
+                  ? theme.colors.primary
+                  : theme.dark
+                  ? theme.colors.background
+                  : undefined
+              }
+              textColor={
+                priority === "low" ? theme.colors.onPrimary : theme.colors.text
+              }
             >
               Low
             </Button>
@@ -175,6 +421,18 @@ const CreateGroupTaskScreen = ({
               mode={priority === "medium" ? "contained" : "outlined"}
               onPress={() => setPriority("medium")}
               style={styles.priorityButton}
+              buttonColor={
+                priority === "medium"
+                  ? theme.colors.primary
+                  : theme.dark
+                  ? theme.colors.background
+                  : undefined
+              }
+              textColor={
+                priority === "medium"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text
+              }
             >
               Medium
             </Button>
@@ -182,16 +440,30 @@ const CreateGroupTaskScreen = ({
               mode={priority === "high" ? "contained" : "outlined"}
               onPress={() => setPriority("high")}
               style={styles.priorityButton}
+              buttonColor={
+                priority === "high"
+                  ? theme.colors.primary
+                  : theme.dark
+                  ? theme.colors.background
+                  : undefined
+              }
+              textColor={
+                priority === "high" ? theme.colors.onPrimary : theme.colors.text
+              }
             >
               High
             </Button>
           </View>
 
-          <Text style={styles.sectionTitle}>Due Date (Optional)</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Due Date (Optional)
+          </Text>
           <Button
             mode="outlined"
             onPress={() => setShowDatePicker(true)}
             style={styles.dateButton}
+            textColor={theme.colors.text}
+            buttonColor={theme.dark ? theme.colors.background : undefined}
           >
             {dueDate && isValid(dueDate)
               ? dueDate.toLocaleDateString()
@@ -207,6 +479,21 @@ const CreateGroupTaskScreen = ({
             />
           )}
 
+          {dueDate && (
+            <View
+              style={[
+                styles.recurrenceSection,
+                { backgroundColor: theme.dark ? "#333333" : "#f9f9f9" },
+              ]}
+            >
+              <RecurrenceSelector
+                initialDueDate={dueDate}
+                onRecurrenceChange={handleRecurrenceChange}
+                initialOptions={recurrenceOptions}
+              />
+            </View>
+          )}
+
           <Button
             mode="contained"
             style={[
@@ -214,7 +501,7 @@ const CreateGroupTaskScreen = ({
               { backgroundColor: theme.colors.primary },
             ]}
             loading={isLoading}
-            disabled={isLoading || !title.trim() || !selectedAssignee}
+            disabled={isLoading || !title.trim() || !assignee}
             onPress={handleCreateTask}
           >
             Create Task
@@ -222,69 +509,33 @@ const CreateGroupTaskScreen = ({
         </View>
       </ScrollView>
 
-      {/* Assignee Selection Menu */}
-      <Menu
-        visible={assigneeSelectVisible}
-        onDismiss={() => setAssigneeSelectVisible(false)}
-        anchor={{ x: 0, y: 0 }}
-        style={styles.menu}
-      >
-        <Menu.Item
-          title="Select Assignee"
-          disabled
-          style={{ backgroundColor: theme.colors.primary }}
-          titleStyle={{ color: theme.colors.onPrimary }}
-        />
-        {getGroupMembers().map((member) => (
-          <Menu.Item
-            key={member.userId}
-            title={member.userName || member.userId}
-            onPress={() => {
-              setSelectedAssignee(member);
-              // If the reviewer is the same as the assignee, clear it
-              if (
-                selectedReviewer &&
-                selectedReviewer.userId === member.userId
-              ) {
-                setSelectedReviewer(null);
-              }
-              setAssigneeSelectVisible(false);
-            }}
+      {contactSelectorVisible && (
+        <Modal
+          visible={contactSelectorVisible}
+          onRequestClose={() => setContactSelectorVisible(false)}
+          animationType="slide"
+        >
+          <ContactSelector
+            onSelectContact={handleContactSelect}
+            onCancel={() => setContactSelectorVisible(false)}
+            title="Assign Task"
           />
-        ))}
-      </Menu>
+        </Modal>
+      )}
 
-      {/* Reviewer Selection Menu */}
-      <Menu
-        visible={reviewerSelectVisible}
-        onDismiss={() => setReviewerSelectVisible(false)}
-        anchor={{ x: 0, y: 0 }}
-        style={styles.menu}
-      >
-        <Menu.Item
-          title="Select Reviewer"
-          disabled
-          style={{ backgroundColor: theme.colors.primary }}
-          titleStyle={{ color: theme.colors.onPrimary }}
-        />
-        <Menu.Item
-          title="No Reviewer"
-          onPress={() => {
-            setSelectedReviewer(null);
-            setReviewerSelectVisible(false);
-          }}
-        />
-        {getReviewers().map((member) => (
-          <Menu.Item
-            key={member.userId}
-            title={member.userName || member.userId}
-            onPress={() => {
-              setSelectedReviewer(member);
-              setReviewerSelectVisible(false);
-            }}
+      {reviewerSelectorVisible && (
+        <Modal
+          visible={reviewerSelectorVisible}
+          onRequestClose={() => setReviewerSelectorVisible(false)}
+          animationType="slide"
+        >
+          <ContactSelector
+            onSelectContact={handleReviewerSelect}
+            onCancel={() => setReviewerSelectorVisible(false)}
+            title="Select Reviewer"
           />
-        ))}
-      </Menu>
+        </Modal>
+      )}
     </View>
   );
 };
@@ -293,13 +544,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
   content: {
     flex: 1,
   },
   formCard: {
-    padding: 16,
     backgroundColor: "white",
     margin: 8,
+    padding: 16,
     borderRadius: 8,
   },
   input: {
@@ -308,22 +564,35 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    marginBottom: 12,
-    color: "#075E54", // WhatsApp green
-  },
-  assignmentSection: {
-    marginBottom: 16,
-  },
-  label: {
-    fontSize: 14,
     marginBottom: 8,
-    color: "#555",
   },
-  selectButton: {
+  assignButton: {
     marginBottom: 16,
   },
-  divider: {
-    marginVertical: 16,
+  categoryButton: {
+    marginBottom: 16,
+  },
+  tagsContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 8,
+    gap: 8,
+  },
+  tagChip: {
+    marginRight: 4,
+    marginBottom: 4,
+  },
+  tagInputContainer: {
+    flexDirection: "row",
+    marginBottom: 16,
+    alignItems: "center",
+  },
+  tagInput: {
+    flex: 1,
+    marginRight: 8,
+  },
+  addTagButton: {
+    marginTop: 8,
   },
   priorityContainer: {
     flexDirection: "row",
@@ -338,14 +607,13 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   createButton: {
+    marginTop: 8,
     paddingVertical: 8,
   },
-  menu: {
-    position: "absolute",
-    width: "80%",
-    maxHeight: "60%",
-    top: 120,
-    alignSelf: "center",
+  recurrenceSection: {
+    marginBottom: 24,
+    borderRadius: 8,
+    padding: 8,
   },
 });
 

@@ -115,10 +115,8 @@ const DashboardScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.title, { color: theme.colors.onPrimary }]}>
-          Dashboard
-        </Text>
+      <View style={[styles.header, { backgroundColor: "black" }]}>
+        <Text style={[styles.title, { color: "white" }]}>Dashboard</Text>
       </View>
 
       <ScrollView
@@ -188,20 +186,18 @@ const DashboardScreen = ({ navigation }: any) => {
           <Card.Content>
             <Text style={styles.cardTitle}>Tasks Due Soon</Text>
             {tasksDueSoon.length > 0 ? (
-              tasksDueSoon
-                .slice(0, 3)
-                .map((task) => (
-                  <TaskCard
-                    key={task.id}
-                    task={task}
-                    onPress={() =>
-                      navigation.navigate("Tasks", {
-                        screen: "TaskDetail",
-                        params: { taskId: task.id },
-                      })
-                    }
-                  />
-                ))
+              tasksDueSoon.slice(0, 3).map((task) => (
+                <TaskCard
+                  key={task.id}
+                  task={task}
+                  onPress={() =>
+                    navigation.navigate("Tasks", {
+                      screen: "TaskDetail",
+                      params: { taskId: task.id },
+                    })
+                  }
+                />
+              ))
             ) : (
               <Text style={styles.emptyText}>
                 No tasks due in the next 3 days

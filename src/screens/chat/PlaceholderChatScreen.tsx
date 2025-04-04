@@ -12,12 +12,9 @@ const PlaceholderChatScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
-        <Appbar.BackAction
-          color={theme.colors.onPrimary}
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title={contact.name} color={theme.colors.onPrimary} />
+      <Appbar.Header style={{ backgroundColor: "black" }}>
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title={contact.name} color="white" />
       </Appbar.Header>
 
       <View style={styles.content}>

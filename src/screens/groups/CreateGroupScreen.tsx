@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { View, StyleSheet, ScrollView } from "react-native";
+import { View, StyleSheet, ScrollView, Alert, Modal } from "react-native";
 import {
   Text,
   TextInput,
@@ -12,9 +12,10 @@ import {
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { createGroup } from "../../store/slices/groupSlice";
-import UserAssignmentModal from "../../components/UserAssignmentModal";
+import { createGroup } from "../../store/slices/groupsSlice";
+import ContactSelector from "../../components/ContactSelector";
 
+// Update the component to use ContactSelector instead of UserAssignmentModal
 const CreateGroupScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
@@ -24,12 +25,13 @@ const CreateGroupScreen = ({ navigation }: any) => {
   const [members, setMembers] = useState<
     Array<{ id: string; displayName?: string }>
   >([]);
-  const [assigneeModalVisible, setAssigneeModalVisible] = useState(false);
+  const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateGroup = async () => {
     if (!name.trim() || !user?.id) {
       // Show error if name is empty or user is not logged in
+      Alert.alert("Error", "Group name is required");
       return;
     }
 
@@ -56,22 +58,27 @@ const CreateGroupScreen = ({ navigation }: any) => {
       navigation.goBack();
     } catch (error) {
       console.error("Failed to create group:", error);
+      Alert.alert("Error", "Failed to create group. Please try again.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleAddMember = (selectedUser: any) => {
-    if (selectedUser && !members.some((m) => m.id === selectedUser.id)) {
+  const handleContactSelect = (contact: any) => {
+    if (
+      contact &&
+      contact.userId &&
+      !members.some((m) => m.id === contact.userId)
+    ) {
       setMembers([
         ...members,
         {
-          id: selectedUser.id,
-          displayName: selectedUser.displayName || selectedUser.phoneNumber,
+          id: contact.userId,
+          displayName: contact.name,
         },
       ]);
     }
-    setAssigneeModalVisible(false);
+    setContactSelectorVisible(false);
   };
 
   const handleRemoveMember = (memberId: string) => {
@@ -82,12 +89,13 @@ const CreateGroupScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Create Group" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Create Group" color="white"
+ />
       </Appbar.Header>
 
       <ScrollView style={{ backgroundColor: theme.colors.background }}>
@@ -136,7 +144,7 @@ const CreateGroupScreen = ({ navigation }: any) => {
 
           <Button
             mode="outlined"
-            onPress={() => setAssigneeModalVisible(true)}
+            onPress={() => setContactSelectorVisible(true)}
             style={styles.addMemberButton}
             icon="account-plus"
           >
@@ -158,13 +166,19 @@ const CreateGroupScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      <UserAssignmentModal
-        visible={assigneeModalVisible}
-        onDismiss={() => setAssigneeModalVisible(false)}
-        onSelectUser={handleAddMember}
-        currentAssigneeId={null}
-        allowMultiple={true}
-      />
+      {contactSelectorVisible && (
+        <Modal
+          visible={contactSelectorVisible}
+          onRequestClose={() => setContactSelectorVisible(false)}
+          animationType="slide"
+        >
+          <ContactSelector
+            onSelectContact={handleContactSelect}
+            onCancel={() => setContactSelectorVisible(false)}
+            title="Add Group Members"
+          />
+        </Modal>
+      )}
     </View>
   );
 };

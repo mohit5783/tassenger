@@ -4,7 +4,7 @@ import taskReducer from "./slices/taskSlice";
 import chatReducer from "./slices/chatSlice";
 import contactsReducer from "./slices/contactsSlice";
 import recurrenceReducer from "./slices/recurrenceSlice";
-import groupsReducer from "./slices/groupSlice";
+import groupsReducer from "./slices/groupsSlice";
 
 export const store = configureStore({
   reducer: {

@@ -12,10 +12,11 @@ import {
   FAB,
   Dialog,
   Portal,
+  Divider,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { fetchGroup, removeGroupMember } from "../../store/slices/groupSlice";
+import { fetchGroup, removeGroupMember } from "../../store/slices/groupsSlice"; // Changed from groupsSlice to groupSlice
 import UserService, { type UserProfile } from "../../services/UserService";
 
 const GroupMembersScreen = ({ navigation, route }: any) => {
@@ -60,10 +61,11 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
     if (!selectedMember || !user) return;
 
     try {
+      // Updated to match the expected parameters
       await dispatch(
         removeGroupMember({
           groupId,
-          userId: selectedMember.id,
+          userId: selectedMember.id, // Changed from memberId to userId
         })
       ).unwrap();
 
@@ -86,7 +88,9 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
     return (
       <List.Item
         title={item.displayName || item.phoneNumber || "Unknown User"}
+        titleStyle={{ color: theme.colors.text }}
         description={isGroupAdmin ? "Admin" : "Member"}
+        descriptionStyle={{ color: theme.colors.textSecondary }}
         left={(props) => (
           <Avatar.Text
             {...props}
@@ -94,6 +98,7 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
             label={(item.displayName || item.phoneNumber || "?")
               .substring(0, 1)
               .toUpperCase()}
+            style={{ backgroundColor: theme.colors.primary }}
           />
         )}
         right={(props) =>
@@ -106,11 +111,13 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
                 setSelectedMember(item);
                 setRemoveMemberDialogVisible(true);
               }}
+              textColor={theme.colors.primary}
             >
               Remove
             </Button>
           ) : null
         }
+        style={{ backgroundColor: theme.dark ? theme.colors.card : "white" }}
       />
     );
   };
@@ -133,12 +140,13 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Group Members" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Group Members" color="white"
+ />
       </Appbar.Header>
 
       {loadingMembers ? (
@@ -150,9 +158,21 @@ const GroupMembersScreen = ({ navigation, route }: any) => {
           data={members}
           renderItem={renderMemberItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[
+            styles.listContent,
+            { backgroundColor: theme.dark ? "transparent" : "#f5f5f5" },
+          ]}
+          ItemSeparatorComponent={() => (
+            <Divider
+              style={{ backgroundColor: theme.dark ? "#333333" : "#E0E0E0" }}
+            />
+          )}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No members found</Text>
+            <Text
+              style={[styles.emptyText, { color: theme.colors.textSecondary }]}
+            >
+              No members found
+            </Text>
           }
         />
       )}

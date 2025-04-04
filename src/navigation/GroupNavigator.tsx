@@ -1,16 +1,19 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import type { GroupStackParamList } from "./types";
-import GroupsListScreen from "@/screens/groups/GroupsListScreen";
-import GroupDetailScreen from "@/screens/groups/GroupDetailScreen";
-import CreateGroupScreen from "@/screens/groups/CreateGroupScreen";
-import GroupTasksScreen from "@/screens/groups/GroupTasksScreen";
-import CreateGroupTaskScreen from "@/screens/groups/CreateGroupTaskScreen";
-import GroupTaskDetailScreen from "@/screens/groups/GroupTaskDetailScreen";
-import GroupMembersScreen from "@/screens/groups/GroupMembersScreen";
+
+// Import screens
+import GroupsListScreen from "../screens/groups/GroupsListScreen";
+import GroupDetailScreen from "../screens/groups/GroupDetailScreen";
+import CreateGroupScreen from "../screens/groups/CreateGroupScreen";
+import GroupMembersScreen from "../screens/groups/GroupMembersScreen";
+import CreateGroupTaskScreen from "../screens/groups/CreateGroupTaskScreen";
+import GroupTasksScreen from "../screens/groups/GroupTasksScreen";
+import EditGroupScreen from "../screens/groups/EditGroupScreen";
+import AddGroupMembersScreen from "../screens/groups/AddGroupMembersScreen";
 
 const Stack = createNativeStackNavigator<GroupStackParamList>();
 
-const GroupNavigator = () => {
+const GroupsNavigator = () => {
   return (
     <Stack.Navigator>
       <Stack.Screen
@@ -29,8 +32,8 @@ const GroupNavigator = () => {
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="GroupTasks"
-        component={GroupTasksScreen}
+        name="GroupMembers"
+        component={GroupMembersScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
@@ -39,17 +42,22 @@ const GroupNavigator = () => {
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="GroupTaskDetail"
-        component={GroupTaskDetailScreen}
+        name="GroupTasks"
+        component={GroupTasksScreen}
         options={{ headerShown: false }}
       />
       <Stack.Screen
-        name="GroupMembers"
-        component={GroupMembersScreen}
+        name="EditGroup"
+        component={EditGroupScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="AddGroupMembers"
+        component={AddGroupMembersScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>
   );
 };
 
-export default GroupNavigator;
+export default GroupsNavigator;

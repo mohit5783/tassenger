@@ -284,10 +284,8 @@ const ConversationsListScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.title, { color: theme.colors.onPrimary }]}>
-          Chats
-        </Text>
+      <View style={[styles.header, { backgroundColor: "black" }]}>
+        <Text style={[styles.title, { color: "white" }]}>Chats</Text>
       </View>
 
       {conversations.length > 0 ? (

@@ -107,12 +107,13 @@ const EditProfileScreen = ({ navigation }: any) => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
-        <Appbar.Content title="Edit Profile" color={theme.colors.onPrimary} />
+        <Appbar.Content title="Edit Profile" color="white"
+ />
       </Appbar.Header>
 
       <ScrollView

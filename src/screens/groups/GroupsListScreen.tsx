@@ -19,7 +19,7 @@ import {
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
-import { fetchUserGroups } from "../../store/slices/groupSlice";
+import { fetchUserGroups } from "../../store/slices/groupsSlice";
 
 const GroupsListScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
@@ -53,13 +53,16 @@ const GroupsListScreen = ({ navigation }: any) => {
     navigation.navigate("GroupDetail", { groupId });
   };
 
-  const filteredGroups = groups.filter((group: any) =>
+  const filteredGroups = groups.filter((group) =>
     group.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const renderGroupItem = ({ item }: { item: any }) => (
     <TouchableOpacity
-      style={styles.groupItem}
+      style={[
+        styles.groupItem,
+        { backgroundColor: theme.dark ? theme.colors.card : "white" },
+      ]}
       onPress={() => handleGroupPress(item.id)}
     >
       <View style={styles.groupContainer}>
@@ -70,10 +73,18 @@ const GroupsListScreen = ({ navigation }: any) => {
         />
         <View style={styles.groupContent}>
           <View style={styles.groupHeader}>
-            <Text style={styles.groupTitle}>{item.name}</Text>
+            <Text style={[styles.groupTitle, { color: theme.colors.text }]}>
+              {item.name}
+            </Text>
           </View>
           <View style={styles.groupPreview}>
-            <Text numberOfLines={1} style={styles.groupDescription}>
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.groupDescription,
+                { color: theme.colors.textSecondary },
+              ]}
+            >
               {item.description || "No description"}
             </Text>
             <Chip icon="account-multiple" style={styles.memberChip}>
@@ -82,7 +93,12 @@ const GroupsListScreen = ({ navigation }: any) => {
           </View>
         </View>
       </View>
-      <Divider style={styles.divider} />
+      <Divider
+        style={[
+          styles.divider,
+          { backgroundColor: theme.dark ? "#333333" : "#E0E0E0" },
+        ]}
+      />
     </TouchableOpacity>
   );
 
@@ -121,17 +137,21 @@ const GroupsListScreen = ({ navigation }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <View style={[styles.header, { backgroundColor: theme.colors.primary }]}>
-        <Text style={[styles.title, { color: theme.colors.onPrimary }]}>
-          Groups
-        </Text>
+      <View style={[styles.header, { backgroundColor: "black" }]}>
+        <Text style={[styles.title, { color: "white" }]}>Groups</Text>
       </View>
 
       <Searchbar
         placeholder="Search groups"
         onChangeText={setSearchQuery}
         value={searchQuery}
-        style={styles.searchBar}
+        style={[
+          styles.searchBar,
+          { backgroundColor: theme.dark ? theme.colors.card : "#F5F5F5" },
+        ]}
+        iconColor={theme.colors.primary}
+        inputStyle={{ color: theme.colors.text }}
+        placeholderTextColor={theme.colors.textSecondary}
       />
 
       {filteredGroups.length > 0 ? (

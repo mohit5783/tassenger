@@ -16,10 +16,10 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   fetchGroup,
-  removeGroupMember,
+  removeGroupMember, // Changed from leaveGroup to removeGroupMember
   deleteGroup,
-} from "../../store/slices/groupSlice";
-import { filterTasksByGroup } from "../../store/slices/taskSlice";
+} from "../../store/slices/groupsSlice"; // Changed from groupSlice to groupsSlice
+import { filterTasksByGroup, clearFilters } from "../../store/slices/taskSlice";
 import UserService, { type UserProfile } from "../../services/UserService";
 
 const GroupDetailScreen = ({ navigation, route }: any) => {
@@ -34,7 +34,11 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
   const [loadingMembers, setLoadingMembers] = useState(false);
 
   useEffect(() => {
+    // First clear any existing filters
+    dispatch(clearFilters());
+    // Then fetch the group
     dispatch(fetchGroup(groupId));
+    // Then apply the group filter
     dispatch(filterTasksByGroup(groupId));
   }, [dispatch, groupId]);
 
@@ -68,7 +72,13 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
         style: "destructive",
         onPress: async () => {
           try {
-            await dispatch(removeGroupMember({ groupId, userId: user.id })).unwrap();
+            // Use removeGroupMember instead of leaveGroup
+            await dispatch(
+              removeGroupMember({
+                groupId,
+                userId: user.id,
+              })
+            ).unwrap();
             navigation.goBack();
           } catch (error) {
             console.error("Failed to leave group:", error);
@@ -120,9 +130,9 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => navigation.goBack()}
         />
         <Appbar.Content
@@ -169,14 +179,18 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
 
       <ScrollView style={{ backgroundColor: theme.colors.background }}>
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={styles.sectionTitle}>Description</Text>
-          <Text style={styles.description}>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Description
+          </Text>
+          <Text style={[styles.description, { color: theme.colors.text }]}>
             {currentGroup.description || "No description provided."}
           </Text>
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={styles.sectionTitle}>Members</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Members
+          </Text>
           {loadingMembers ? (
             <ActivityIndicator size="small" color={theme.colors.primary} />
           ) : (
@@ -187,9 +201,11 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
                   title={
                     member.displayName || member.phoneNumber || "Unknown User"
                   }
+                  titleStyle={{ color: theme.colors.text }}
                   description={
                     member.id === currentGroup.createdBy ? "Admin" : "Member"
                   }
+                  descriptionStyle={{ color: theme.colors.textSecondary }}
                   left={(props) => (
                     <Avatar.Text
                       {...props}
@@ -197,6 +213,7 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
                       label={(member.displayName || member.phoneNumber || "?")
                         .substring(0, 1)
                         .toUpperCase()}
+                      style={{ backgroundColor: theme.colors.primary }}
                     />
                   )}
                 />
@@ -205,6 +222,7 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
                 mode="outlined"
                 onPress={() => navigation.navigate("GroupMembers", { groupId })}
                 style={styles.viewAllButton}
+                textColor={theme.colors.primary}
               >
                 View All Members
               </Button>
@@ -213,14 +231,18 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          <Text style={styles.sectionTitle}>Tasks</Text>
+          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
+            Tasks
+          </Text>
           {filteredTasks.length > 0 ? (
             <>
               {filteredTasks.slice(0, 3).map((task) => (
                 <List.Item
                   key={task.id}
                   title={task.title}
+                  titleStyle={{ color: theme.colors.text }}
                   description={`Status: ${task.status}`}
+                  descriptionStyle={{ color: theme.colors.textSecondary }}
                   left={(props) => (
                     <List.Icon
                       {...props}
@@ -229,6 +251,7 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
                           ? "check-circle"
                           : "circle-outline"
                       }
+                      color={theme.colors.primary}
                     />
                   )}
                   onPress={() =>
@@ -244,13 +267,18 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
                   mode="outlined"
                   onPress={() => navigation.navigate("GroupTasks", { groupId })}
                   style={styles.viewAllButton}
+                  textColor={theme.colors.primary}
                 >
                   View All Tasks
                 </Button>
               )}
             </>
           ) : (
-            <Text style={styles.emptyText}>No tasks in this group yet.</Text>
+            <Text
+              style={[styles.emptyText, { color: theme.colors.textSecondary }]}
+            >
+              No tasks in this group yet.
+            </Text>
           )}
         </View>
       </ScrollView>
@@ -294,7 +322,6 @@ const styles = StyleSheet.create({
     marginVertical: 16,
     color: "#888",
   },
-
   fab: {
     position: "absolute",
     margin: 16,
