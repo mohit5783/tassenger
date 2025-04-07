@@ -1,6 +1,6 @@
 {
-  "name": "tassengerapp",
-  "version": "1.0.0",
+  "name": "tassenger",
+  "version": "1.1.0",
   "main": "index.ts",
   "scripts": {
     "start": "expo start",
