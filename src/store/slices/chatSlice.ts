@@ -500,7 +500,13 @@ const chatSlice = createSlice({
       state.error = null;
     },
     addMessage: (state, action) => {
-      state.messages.push(action.payload);
+      // Check if message already exists before adding
+      const messageExists = state.messages.some(
+        (msg) => msg.id === action.payload.id
+      );
+      if (!messageExists) {
+        state.messages.push(action.payload);
+      }
     },
     updateConversation: (state, action) => {
       const { conversationId, data } = action.payload;
@@ -605,7 +611,14 @@ const chatSlice = createSlice({
       })
       .addCase(sendMessage.fulfilled, (state, action) => {
         state.isLoading = false;
-        state.messages.push(action.payload);
+
+        // Check if message already exists before adding
+        const messageExists = state.messages.some(
+          (msg) => msg.id === action.payload.id
+        );
+        if (!messageExists) {
+          state.messages.push(action.payload);
+        }
 
         // Update the conversation's last message
         const conversationId = state.currentConversation?.id;

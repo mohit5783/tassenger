@@ -55,8 +55,8 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     }
   }, [dispatch, conversationId, user, readReceipts]);
 
-  // Replace the handleSendMessage function with this version:
-  const handleSendMessage = () => {
+  // Replace the handleSendMessage function with this improved version:
+  const handleSendMessage = async () => {
     if (!messageText.trim() || !user || !currentConversation || isSending)
       return;
 
@@ -64,23 +64,25 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     setMessageText(""); // Clear input immediately
     setIsSending(true);
 
-    dispatch(
-      sendMessage({
-        conversationId,
-        text,
-        senderId: user.id,
-        senderName: user.displayName || user.phoneNumber || "User",
-      })
-    )
-      .unwrap()
-      .catch((error) => {
-        console.error("Error sending message:", error);
-        // Optionally restore the message text if sending fails
-        // setMessageText(text);
-      })
-      .finally(() => {
-        setIsSending(false);
-      });
+    try {
+      // Send the message and wait for it to complete
+      await dispatch(
+        sendMessage({
+          conversationId,
+          text,
+          senderId: user.id,
+          senderName: user.displayName || user.phoneNumber || "User",
+        })
+      ).unwrap();
+
+      // No need to manually add the message to the UI - the Firebase listener will handle it
+    } catch (error) {
+      console.error("Error sending message:", error);
+      // Optionally restore the message text if sending fails
+      setMessageText(text);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const handleShareTask = (task: Task) => {
@@ -200,7 +202,7 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     );
 
     return (
-      <View>
+      <View key={`message-${item.id}-${index}`}>
         {shouldShowDate(item, index) && (
           <View style={styles.dateContainer}>
             <Text style={styles.dateText}>
@@ -385,7 +387,8 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
         ref={flatListRef}
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item, index) => `message-${item.id}-${index}`}
+        keyExtractor={(item) => item.id}
+        extraData={messages.length}
         contentContainerStyle={styles.messagesList}
         onContentSizeChange={() =>
           flatListRef.current?.scrollToEnd({ animated: true })

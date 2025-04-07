@@ -177,7 +177,7 @@ export const ThemeProvider = ({ children }: any) => {
       dark: isDarkTheme,
       colors: {
         // Use neon green for primary color in dark mode, teal in light mode
-        primary: isDarkTheme ? "#39FF14" : whatsappColors.tealGreen,
+        primary: isDarkTheme ? "#00C2A8" : whatsappColors.tealGreen,
         background: isDarkTheme ? "#121212" : "#F7F7F7",
         card: isDarkTheme ? "#1E1E1E" : "#FFFFFF",
         text: isDarkTheme ? "#FFFFFF" : "#000000",
@@ -193,7 +193,7 @@ export const ThemeProvider = ({ children }: any) => {
             todo: isDarkTheme ? "#6B7280" : "#9CA3AF", // Gray that works in both themes
             inProgress: isDarkTheme ? "#FFCC00" : "#FFC107", // Yellow for in-progress
             completed: isDarkTheme ? "#50FF50" : whatsappColors.lightGreen, // Keep the green for completed
-            review: isDarkTheme ? "#39FF14" : "#2196F3",
+            review: isDarkTheme ? "#00C2A8" : "#2196F3",
             pending: isDarkTheme ? "#CCFF00" : "#9C27B0",
           },
         },

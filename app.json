@@ -2,17 +2,18 @@
   "expo": {
     "name": "Tassenger",
     "slug": "tassengerapp",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#3497F9"
+      "backgroundColor": "#00c2a8"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
+      "buildNumber": "2",
       "supportsTablet": true,
       "bundleIdentifier": "com.virtualify.tassenger",
       "googleServicesFile": "./ios/Tassenger/GoogleService-Info.plist",
@@ -35,7 +36,8 @@
         "WAKE_LOCK",
         "POST_NOTIFICATIONS",
         "android.permission.WRITE_CONTACTS"
-      ]
+      ],
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -81,6 +83,7 @@
         "projectId": "dc93b267-306a-4cc3-a66b-b01ea680488d"
       }
     },
-    "owner": "hemantsinghrajput047"
+    "owner": "hemantsinghrajput047",
+    "newArchEnabled": true
   }
 }

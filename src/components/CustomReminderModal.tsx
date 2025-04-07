@@ -1,8 +1,8 @@
 "use client";
 
 import type React from "react";
-import { useState } from "react";
-import { View, StyleSheet } from "react-native";
+import { useState, useEffect } from "react";
+import { View, StyleSheet, KeyboardAvoidingView, Platform } from "react-native";
 import {
   Modal,
   Portal,
@@ -25,32 +25,35 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
   onSave,
 }) => {
   const { theme } = useTheme();
-  const [days, setDays] = useState("");
-  const [hours, setHours] = useState("");
-  const [minutes, setMinutes] = useState("");
+  const [days, setDays] = useState("0");
+  const [hours, setHours] = useState("0");
+  const [minutes, setMinutes] = useState("0");
+
+  // Reset form when modal opens
+  useEffect(() => {
+    if (visible) {
+      setDays("0");
+      setHours("0");
+      setMinutes("0");
+    }
+  }, [visible]);
 
   const handleSave = () => {
+    // Convert to numbers with default of 0 if empty or NaN
     const daysNum = Number.parseInt(days) || 0;
     const hoursNum = Number.parseInt(hours) || 0;
     const minutesNum = Number.parseInt(minutes) || 0;
 
-    if (daysNum === 0 && hoursNum === 0 && minutesNum === 0) {
-      // At least one value must be greater than 0
-      return;
+    // Only save if at least one value is greater than 0
+    if (daysNum > 0 || hoursNum > 0 || minutesNum > 0) {
+      onSave(daysNum, hoursNum, minutesNum);
+    } else {
+      // If all values are 0, set at least minutes to 1
+      onSave(0, 0, 1);
     }
-
-    onSave(daysNum, hoursNum, minutesNum);
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setDays("");
-    setHours("");
-    setMinutes("");
   };
 
   const handleDismiss = () => {
-    resetForm();
     onDismiss();
   };
 
@@ -61,98 +64,105 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
         onDismiss={handleDismiss}
         contentContainerStyle={styles.modalContainer}
       >
-        <Surface
-          style={[
-            styles.modalContent,
-            { backgroundColor: theme.dark ? "#1E1E1E" : "#FFFFFF" },
-          ]}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.keyboardAvoidingView}
         >
-          <Text style={[styles.title, { color: theme.colors.text }]}>
-            Custom Reminder
-          </Text>
-          <Text
-            style={[styles.subtitle, { color: theme.colors.textSecondary }]}
+          <Surface
+            style={[
+              styles.modalContent,
+              { backgroundColor: theme.dark ? "#1E1E1E" : "#FFFFFF" },
+            ]}
           >
-            Set a custom time before the due date
-          </Text>
-
-          <View style={styles.inputsContainer}>
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.input}
-                label="Days"
-                value={days}
-                onChangeText={setDays}
-                keyboardType="number-pad"
-                mode="outlined"
-              />
-              <Text
-                style={[
-                  styles.inputLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                days
-              </Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.input}
-                label="Hours"
-                value={hours}
-                onChangeText={setHours}
-                keyboardType="number-pad"
-                mode="outlined"
-              />
-              <Text
-                style={[
-                  styles.inputLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                hours
-              </Text>
-            </View>
-
-            <View style={styles.inputGroup}>
-              <TextInput
-                style={styles.input}
-                label="Minutes"
-                value={minutes}
-                onChangeText={setMinutes}
-                keyboardType="number-pad"
-                mode="outlined"
-              />
-              <Text
-                style={[
-                  styles.inputLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                minutes
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.buttonContainer}>
-            <Button
-              mode="outlined"
-              onPress={handleDismiss}
-              style={styles.button}
+            <Text style={[styles.title, { color: theme.colors.text }]}>
+              Custom Reminder
+            </Text>
+            <Text
+              style={[styles.subtitle, { color: theme.colors.textSecondary }]}
             >
-              Cancel
-            </Button>
-            <Button
-              mode="contained"
-              onPress={handleSave}
-              style={[styles.button, { backgroundColor: theme.colors.primary }]}
-              disabled={days === "" && hours === "" && minutes === ""}
-            >
-              Save
-            </Button>
-          </View>
-        </Surface>
+              Set a custom time before the due date
+            </Text>
+
+            <View style={styles.inputsContainer}>
+              <View style={styles.inputGroup}>
+                <TextInput
+                  style={styles.input}
+                  label="Days"
+                  value={days}
+                  onChangeText={setDays}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                />
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  days
+                </Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <TextInput
+                  style={styles.input}
+                  label="Hours"
+                  value={hours}
+                  onChangeText={setHours}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                />
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  hours
+                </Text>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <TextInput
+                  style={styles.input}
+                  label="Minutes"
+                  value={minutes}
+                  onChangeText={setMinutes}
+                  keyboardType="number-pad"
+                  mode="outlined"
+                />
+                <Text
+                  style={[
+                    styles.inputLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  minutes
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.buttonContainer}>
+              <Button
+                mode="outlined"
+                onPress={handleDismiss}
+                style={styles.button}
+              >
+                Cancel
+              </Button>
+              <Button
+                mode="contained"
+                onPress={handleSave}
+                style={[
+                  styles.button,
+                  { backgroundColor: theme.colors.primary },
+                ]}
+              >
+                Save
+              </Button>
+            </View>
+          </Surface>
+        </KeyboardAvoidingView>
       </Modal>
     </Portal>
   );
@@ -160,11 +170,18 @@ const CustomReminderModal: React.FC<CustomReminderModalProps> = ({
 
 const styles = StyleSheet.create({
   modalContainer: {
-    padding: 20,
+    margin: 20,
+    justifyContent: "flex-end",
+    flex: 1,
+  },
+  keyboardAvoidingView: {
+    width: "100%",
+    justifyContent: "flex-end",
   },
   modalContent: {
     padding: 24,
     borderRadius: 12,
+    maxHeight: "80%",
   },
   title: {
     fontSize: 20,
@@ -194,6 +211,7 @@ const styles = StyleSheet.create({
   buttonContainer: {
     flexDirection: "row",
     justifyContent: "flex-end",
+    marginTop: 8,
   },
   button: {
     marginLeft: 12,

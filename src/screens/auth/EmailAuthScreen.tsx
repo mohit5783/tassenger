@@ -14,7 +14,7 @@ import { Text, TextInput, Button, HelperText } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { ArrowLeft } from "react-native-feather";
 import { useAppDispatch } from "../../store/hooks";
-import { signIn, signUp, setMockUser } from "../../store/slices/authSlice";
+import { signIn, signUp } from "../../store/slices/authSlice";
 
 const EmailAuthScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
@@ -117,7 +117,10 @@ const EmailAuthScreen = ({ navigation }: any) => {
     try {
       if (isSignUp) {
         // Combine country code and phone number
-        const fullPhoneNumber = `${countryCode}${phoneNumber}`;
+        const fullPhoneNumber = `${countryCode}${phoneNumber.replace(
+          /\D/g,
+          ""
+        )}`;
 
         await dispatch(
           signUp({
@@ -139,10 +142,22 @@ const EmailAuthScreen = ({ navigation }: any) => {
       }
     } catch (error: any) {
       console.error("Auth error:", error);
-      Alert.alert(
-        isSignUp ? "Sign Up Failed" : "Sign In Failed",
-        error.message || "Please check your credentials and try again"
-      );
+      // Check if the error is related to phone number validation
+      if (
+        error.message &&
+        error.message.includes("phone number is already registered")
+      ) {
+        Alert.alert(
+          "Phone Number Already Registered",
+          "This phone number is already linked to an account. Please use a different phone number.",
+          [{ text: "OK" }]
+        );
+      } else {
+        Alert.alert(
+          isSignUp ? "Sign Up Failed" : "Sign In Failed",
+          error.message || "Please check your credentials and try again"
+        );
+      }
     } finally {
       setIsLoading(false);
     }
@@ -150,21 +165,6 @@ const EmailAuthScreen = ({ navigation }: any) => {
 
   const handleBack = () => {
     navigation.goBack();
-  };
-
-  // For development only - bypass authentication
-  const handleBypassAuth = () => {
-    dispatch(
-      setMockUser({
-        id: "mock-user-id",
-        email: email || "test@example.com",
-        displayName: displayName || "Test User",
-        phoneNumber: countryCode + phoneNumber || "+11234567890",
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        hasCompletedProfile: false, // Set to false to test first-time login flow
-      })
-    );
   };
 
   return (
@@ -308,15 +308,6 @@ const EmailAuthScreen = ({ navigation }: any) => {
                 : "Don't have an account? Sign Up"}
             </Text>
           </TouchableOpacity>
-
-          {/* Development only button - remove in production */}
-          {/* <Button
-            mode="text"
-            style={styles.devButton}
-            onPress={handleBypassAuth}
-          >
-            [DEV] Skip Authentication
-          </Button> */}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -377,9 +368,6 @@ const styles = StyleSheet.create({
   switchModeButton: {
     marginTop: 16,
     alignItems: "center",
-  },
-  devButton: {
-    marginTop: 24,
   },
 });
 

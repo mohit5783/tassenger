@@ -118,8 +118,7 @@ const GroupTasksScreen = ({ navigation, route }: any) => {
             color="white"
             onPress={() => navigation.goBack()}
           />
-          <Appbar.Content title="Group Tasks" color="white"
- />
+          <Appbar.Content title="Group Tasks" color="white" />
         </Appbar.Header>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
@@ -133,17 +132,11 @@ const GroupTasksScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content
-          title={`${currentGroup.name} Tasks`}
-          color={theme.colors.onPrimary}
-        />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title={`${currentGroup.name} Tasks`} color="white" />
         <Appbar.Action
           icon="filter"
-          color={theme.colors.onPrimary}
+          color="white"
           onPress={() => setMenuVisible(true)}
         />
       </Appbar.Header>

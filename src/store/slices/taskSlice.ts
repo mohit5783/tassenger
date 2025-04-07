@@ -48,6 +48,7 @@ export interface Task {
   assignedTo?: string;
   assignedToName?: string;
   groupId?: string; // ID of the group this task belongs to
+  groupName?: string; // Name of the group this task belongs to
   assignment?: TaskAssignment; // Enhanced assignment details
   createdAt: number;
   updatedAt: number;

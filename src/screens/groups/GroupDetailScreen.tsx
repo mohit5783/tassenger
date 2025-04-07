@@ -131,21 +131,15 @@ const GroupDetailScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content
-          title={currentGroup.name}
-          color={theme.colors.onPrimary}
-        />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title={currentGroup.name} color="white" />
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
           anchor={
             <Appbar.Action
               icon="dots-vertical"
-              color={theme.colors.onPrimary}
+              color="white"
               onPress={() => setMenuVisible(true)}
             />
           }

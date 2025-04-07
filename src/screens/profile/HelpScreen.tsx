@@ -29,12 +29,8 @@ const HelpScreen = ({ navigation }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Help & Support" color="white"
- />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Help & Support" color="white" />
       </Appbar.Header>
 
       <ScrollView style={styles.content}>

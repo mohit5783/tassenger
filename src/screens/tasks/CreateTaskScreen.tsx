@@ -29,7 +29,6 @@ import NotificationSettings from "../../components/NotificationSettings";
 import CustomReminderModal from "../../components/CustomReminderModal";
 import ContactSelector from "../../components/ContactSelector";
 import { scheduleCustomTaskReminder } from "../../services/NotificationService";
-import { v4 as uuidv4 } from "uuid";
 import RecurrenceSelector from "../../components/RecurrenceSelector";
 import type { RecurrenceOptions } from "../../types/recurrence";
 import type { Contact } from "../../services/ContactsService";
@@ -156,13 +155,20 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     }
   }, [dueDate, taskReminderDefault]);
 
+  // Replace the handleAddCustomReminder function with this version
+  // that doesn't use UUID at all and uses a completely different approach for IDs
+
+  // Replace the handleAddCustomReminder function with this version
   const handleAddCustomReminder = (
     days: number,
     hours: number,
     minutes: number
   ) => {
+    // Create a simple ID based on the time values instead of using UUID
+    const simpleId = `reminder_${days}_${hours}_${minutes}_${Date.now()}`;
+
     const newReminder = {
-      id: uuidv4(),
+      id: simpleId,
       days,
       hours,
       minutes,
@@ -174,7 +180,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     };
 
     setCustomReminders([...customReminders, newReminder]);
-    setSelectedReminders([...selectedReminders, newReminder.id]);
+    setSelectedReminders([...selectedReminders, simpleId]);
     setCustomReminderModalVisible(false);
   };
 
@@ -314,6 +320,23 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
 
   // Handle recurrence options change
   const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
+    // Validate numeric values before setting state
+    if (options) {
+      // Ensure frequency is a valid number
+      if (isNaN(options.frequency)) {
+        options.frequency = 1;
+      }
+
+      // Ensure endCount is a valid number if present
+      if (
+        options.endType === "count" &&
+        options.endCount !== undefined &&
+        isNaN(options.endCount)
+      ) {
+        options.endCount = 1;
+      }
+    }
+
     setRecurrenceOptions(options);
   };
 
@@ -326,7 +349,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: "#000000" }}>
+      <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
         <Appbar.Content title="Create Task" color="white" />
       </Appbar.Header>

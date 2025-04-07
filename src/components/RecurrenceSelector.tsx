@@ -22,6 +22,7 @@ import {
   DEFAULT_RECURRENCE_OPTIONS,
 } from "../types/recurrence";
 import { RecurrenceService } from "../services/RecurrenceService";
+import { isValid } from "date-fns";
 
 interface RecurrenceSelectorProps {
   initialDueDate: Date;
@@ -64,12 +65,21 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
       return;
     }
 
+    // Validate numeric values to prevent NaN
+    const safeFrequency = isNaN(frequency) ? 1 : frequency;
+    const safeEndCount =
+      endType === "count" && endCount !== undefined
+        ? isNaN(endCount)
+          ? 1
+          : endCount
+        : undefined;
+
     const options: RecurrenceOptions = {
       type: recurrenceType,
-      frequency,
+      frequency: safeFrequency,
       endType,
       ...(endType === "date" ? { endDate } : {}),
-      ...(endType === "count" ? { endCount } : {}),
+      ...(endType === "count" ? { endCount: safeEndCount } : {}),
     };
 
     onRecurrenceChange(options);
@@ -108,7 +118,10 @@ const RecurrenceSelector: React.FC<RecurrenceSelectorProps> = ({
   const handleDateChange = (event: any, selectedDate?: Date) => {
     setShowDatePicker(false);
     if (selectedDate) {
-      setEndDate(selectedDate);
+      // Ensure it's a valid date
+      if (isValid(selectedDate)) {
+        setEndDate(selectedDate);
+      }
     }
   };
 

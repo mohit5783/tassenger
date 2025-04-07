@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   unreadBadge: {
-    backgroundColor: "#075E54", // Default color
+    backgroundColor: "#00C2A8", // Default color
   },
   divider: {
     height: 1,

@@ -70,44 +70,54 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
   };
 
   const handleCreateTask = async () => {
-    if (!title.trim() || !user || !assignee) {
-      Alert.alert(
-        "Error",
-        "Please fill in all required fields and assign the task to a group member"
-      );
-      return;
-    }
+    if (!title.trim() || !user || !assignee) return;
 
     try {
+      // First, get the group name
+      // const groupRef = doc(db, "groups", groupId)
+      // const groupSnap = await getDoc(groupRef)
+      const groupName = currentGroup?.name; //groupSnap.exists() ? groupSnap.data().name : "Group"
+
+      // Create a task object with all required fields
+      const taskData: any = {
+        title,
+        description,
+        priority,
+        category,
+        tags,
+        status: "assigned" as TaskStatus,
+        createdBy: user.id,
+        dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
+        groupId,
+        groupName, // Add the group name to the task data
+        assigneeId: assignee.id,
+        assigneeName: assignee.displayName,
+        reviewerId: reviewer?.id,
+        reviewerName: reviewer?.displayName,
+      };
+
+      // Only add assignedTo fields if we have an assigned user
+      // if (assignee?.id) {
+      //   taskData.assignedTo = assignee.id
+      //   taskData.assignedToName = assignee.displayName
+      // }
+
       // If this is a recurring task, use the createRecurringTask action
       if (recurrenceOptions && dueDate) {
-        // Create the task data object
-        const taskData = {
-          title,
-          description,
-          priority,
-          category,
-          tags,
-          status: "assigned" as TaskStatus,
-          createdBy: user.id,
-          dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
-          groupId,
-          assigneeId: assignee.id,
-          assigneeName: assignee.displayName,
-          reviewerId: reviewer?.id,
-          reviewerName: reviewer?.displayName,
-        };
+        // Make sure we have a valid endDate if endType is "date"
+        const safeRecurrenceOptions = { ...recurrenceOptions };
+        // if (safeRecurrenceOptions.endType !== "date") {
+        //   delete safeRecurrenceOptions.endDate
+        // }
 
-        // Keep the original recurrenceOptions with Date object intact
-        // The createRecurringTask action will handle the conversion internally
         await dispatch(
           createRecurringTask({
             taskData,
-            recurrenceOptions: recurrenceOptions,
+            recurrenceOptions: safeRecurrenceOptions,
           })
         ).unwrap();
       } else {
-        // Otherwise create a regular group task
+        // Otherwise create a regular task
         await dispatch(
           createGroupTask({
             title,
@@ -120,6 +130,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
             dueDate:
               dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
             groupId,
+            groupName: currentGroup?.name, // Add the group name
             assigneeId: assignee.id,
             assigneeName: assignee.displayName,
             reviewerId: reviewer?.id,
@@ -130,7 +141,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
 
       navigation.goBack();
     } catch (error) {
-      console.error("Failed to create group task:", error);
+      console.error("Failed to create task:", error);
       Alert.alert("Error", "Failed to create task. Please try again.");
     }
   };
@@ -200,10 +211,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
             color="white"
             onPress={() => navigation.goBack()}
           />
-          <Appbar.Content
-            title="Create Group Task"
-            color={theme.colors.onPrimary}
-          />
+          <Appbar.Content title="Create Group Task" color="white" />
         </Appbar.Header>
         <View style={styles.centered}>
           <Text>Loading group...</Text>
@@ -217,13 +225,10 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
         <Appbar.Content
           title={`New Task for ${currentGroup.name}`}
-          color={theme.colors.onPrimary}
+          color="white"
         />
       </Appbar.Header>
 

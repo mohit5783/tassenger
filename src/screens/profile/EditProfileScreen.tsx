@@ -24,6 +24,8 @@ import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import { updateUserProfile } from "../../store/slices/authSlice";
 import { Camera, Phone } from "react-native-feather";
 import * as ImagePicker from "expo-image-picker";
+import { collection, getDocs, query, where } from "firebase/firestore";
+import { db } from "../../api/firebase/config";
 
 const EditProfileScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
@@ -37,6 +39,8 @@ const EditProfileScreen = ({ navigation }: any) => {
   const [occupation, setOccupation] = useState(user?.occupation || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
+  const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
+  const [countryCode, setCountryCode] = useState("+1"); // Default to US country code
 
   // Get the appropriate default avatar based on sex
   const getDefaultAvatar = () => {
@@ -78,6 +82,28 @@ const EditProfileScreen = ({ navigation }: any) => {
     if (!user) return;
 
     try {
+      // Check if phone number is changing
+      const fullPhoneNumber = `${countryCode}${phoneNumber.replace(/\D/g, "")}`;
+
+      if (fullPhoneNumber !== user.phoneNumber) {
+        // Check if the new phone number is already in use
+        const usersRef = collection(db, "users");
+        const q = query(usersRef, where("phoneNumber", "==", fullPhoneNumber));
+        const querySnapshot = await getDocs(q);
+
+        // If phone exists and it's not the current user's
+        if (
+          !querySnapshot.empty &&
+          !querySnapshot.docs.some((doc) => doc.id === user.id)
+        ) {
+          Alert.alert(
+            "Phone Number Already Registered",
+            "This phone number is already linked to another account. Please use a different phone number."
+          );
+          return;
+        }
+      }
+
       await dispatch(
         updateUserProfile({
           userId: user.id,
@@ -88,6 +114,7 @@ const EditProfileScreen = ({ navigation }: any) => {
             sex,
             occupation,
             bio,
+            phoneNumber: fullPhoneNumber,
             photoURL,
             hasCompletedProfile: true, // Mark profile as completed
           },
@@ -108,12 +135,8 @@ const EditProfileScreen = ({ navigation }: any) => {
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Edit Profile" color="white"
- />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Edit Profile" color="white" />
       </Appbar.Header>
 
       <ScrollView

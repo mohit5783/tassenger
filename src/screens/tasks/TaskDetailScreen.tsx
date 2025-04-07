@@ -404,22 +404,16 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Task Details" color="white"
- />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Task Details" color="white" />
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
           anchor={
             <Appbar.Action
-              icon={(props) => (
-                <MoreVertical {...props} color={theme.colors.onPrimary} />
-              )}
+              icon={(props) => <MoreVertical {...props} color="white" />}
               onPress={() => setMenuVisible(true)}
-              color={theme.colors.onPrimary}
+              color="white"
             />
           }
         >

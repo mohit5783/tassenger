@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   View,
   StyleSheet,
-  FlatList,
   TouchableOpacity,
   RefreshControl,
+  FlatList,
 } from "react-native";
 import {
   Text,
@@ -16,6 +16,7 @@ import {
   Badge,
   Menu,
   Button,
+  Chip,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -26,10 +27,25 @@ import {
 } from "../../store/slices/taskSlice";
 import { format, isValid } from "date-fns";
 import TaskSearchBar from "../../components/TaskSearchBar";
-import { ArrowDown, ArrowUp } from "react-native-feather";
+import {
+  ArrowDown,
+  ArrowUp,
+  ChevronDown,
+  ChevronUp,
+} from "react-native-feather";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "../../api/firebase/config";
 
 type SortOption = "createdAt" | "dueDate" | "priority" | "status";
 type SortDirection = "asc" | "desc";
+type FilterType = "status" | "priority" | "assignment" | null;
+
+interface TaskSection {
+  title: string;
+  data: Task[];
+  type: "active" | "completed";
+  isCollapsed?: boolean;
+}
 
 const TasksListScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
@@ -39,15 +55,24 @@ const TasksListScreen = ({ navigation }: any) => {
   const { user } = useAppSelector((state) => state.auth);
   const [refreshing, setRefreshing] = useState(false);
   const [sortMenuVisible, setSortMenuVisible] = useState(false);
-  const [sortOption, setSortOption] = useState<SortOption>("createdAt");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [sortedTasks, setSortedTasks] = useState<Task[]>([]);
+  const [sortOption, setSortOption] = useState<SortOption>("dueDate");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+  const [completedCollapsed, setCompletedCollapsed] = useState(true);
+  const [groupNames, setGroupNames] = useState<Record<string, string>>({});
+  const groupNamesRef = useRef<Record<string, string>>({});
 
-  // Add this at the beginning of the component to ensure
-  // we're clearing any group filters when viewing all tasks
+  // New state for filters
+  const [activeFilterType, setActiveFilterType] = useState<FilterType>(null);
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
+  const [assignmentFilter, setAssignmentFilter] = useState<string | null>(null);
+  const [displayedTasks, setDisplayedTasks] = useState<Task[]>([]);
 
+  // State to track if search is focused
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
+
+  // Clear any group filters when the task list screen mounts
   useEffect(() => {
-    // Clear any group filters when the task list screen mounts
     dispatch(clearFilters());
 
     if (user) {
@@ -55,13 +80,11 @@ const TasksListScreen = ({ navigation }: any) => {
     }
   }, [dispatch, user]);
 
+  // Apply filters whenever tasks, filters, or sort options change
   useEffect(() => {
-    // Apply sorting to filtered or all tasks
-    const tasksToSort =
-      searchQuery || Object.keys(activeFilters).length > 0
-        ? filteredTasks
-        : tasks;
-    sortTasks(tasksToSort, sortOption, sortDirection);
+    if (tasks.length > 0) {
+      applyFilters();
+    }
   }, [
     tasks,
     filteredTasks,
@@ -69,13 +92,48 @@ const TasksListScreen = ({ navigation }: any) => {
     sortDirection,
     searchQuery,
     activeFilters,
+    statusFilter,
+    priorityFilter,
+    assignmentFilter,
+    completedCollapsed,
   ]);
 
-  // Add this useEffect to ensure the main task list shows all tasks when it mounts:
   useEffect(() => {
-    // Clear any group filters when the task list screen loads
-    dispatch(clearFilters());
-  }, [dispatch]);
+    const fetchGroupNames = async () => {
+      const newGroupNames: Record<string, string> = {
+        ...groupNamesRef.current,
+      };
+      let hasNewGroups = false;
+
+      // Find all tasks with groupIds that we don't have names for yet
+      for (const task of tasks) {
+        if (task.groupId && !newGroupNames[task.groupId]) {
+          try {
+            const groupDoc = await getDoc(doc(db, "groups", task.groupId));
+            if (groupDoc.exists()) {
+              newGroupNames[task.groupId] = groupDoc.data().name || "Group";
+              hasNewGroups = true;
+            }
+          } catch (error) {
+            console.error(
+              `Error fetching group name for ${task.groupId}:`,
+              error
+            );
+          }
+        }
+      }
+
+      // Only update state if we found new groups
+      if (hasNewGroups) {
+        setGroupNames(newGroupNames);
+        groupNamesRef.current = newGroupNames;
+      }
+    };
+
+    if (tasks.length > 0) {
+      fetchGroupNames();
+    }
+  }, [tasks]);
 
   const loadTasks = async () => {
     if (user) {
@@ -85,51 +143,8 @@ const TasksListScreen = ({ navigation }: any) => {
     }
   };
 
-  const sortTasks = (
-    tasksToSort: Task[],
-    option: SortOption,
-    direction: SortDirection
-  ) => {
-    const sorted = [...tasksToSort].sort((a, b) => {
-      switch (option) {
-        case "dueDate":
-          // Handle tasks without due dates
-          if (!a.dueDate && !b.dueDate) return 0;
-          if (!a.dueDate) return direction === "asc" ? 1 : -1;
-          if (!b.dueDate) return direction === "asc" ? -1 : 1;
-          return direction === "asc"
-            ? a.dueDate - b.dueDate
-            : b.dueDate - a.dueDate;
-
-        case "priority":
-          const priorityValues = { high: 3, medium: 2, low: 1 };
-          const aValue = priorityValues[a.priority] || 0;
-          const bValue = priorityValues[b.priority] || 0;
-          return direction === "asc" ? aValue - bValue : bValue - aValue;
-
-        case "status":
-          const statusValues = {
-            todo: 1,
-            inProgress: 2,
-            review: 3,
-            pending: 4,
-            completed: 5,
-          };
-          const aStatus =
-            statusValues[a.status as keyof typeof statusValues] || 0;
-          const bStatus =
-            statusValues[b.status as keyof typeof statusValues] || 0;
-          return direction === "asc" ? aStatus - bStatus : bStatus - aStatus;
-
-        case "createdAt":
-        default:
-          return direction === "asc"
-            ? a.createdAt - b.createdAt
-            : b.createdAt - a.createdAt;
-      }
-    });
-
-    setSortedTasks(sorted);
+  const toggleCompletedSection = () => {
+    setCompletedCollapsed(!completedCollapsed);
   };
 
   const toggleSortDirection = () => {
@@ -141,6 +156,98 @@ const TasksListScreen = ({ navigation }: any) => {
     await loadTasks();
     setRefreshing(false);
   };
+
+  // Function to apply filters and sort tasks
+  const applyFilters = useCallback(() => {
+    if (!user) return;
+
+    const tasksToFilter =
+      searchQuery || Object.keys(activeFilters).length > 0
+        ? filteredTasks
+        : tasks;
+    let result = [...tasksToFilter];
+
+    // Apply status filter
+    if (statusFilter) {
+      if (statusFilter === "todo") {
+        result = result.filter((task) => task.status === "todo");
+      } else if (statusFilter === "inProgress") {
+        result = result.filter((task) => task.status === "inProgress");
+      } else if (statusFilter === "completed") {
+        result = result.filter((task) => task.status === "completed");
+      }
+    } else if (completedCollapsed) {
+      // If no status filter but completed is collapsed, hide completed tasks
+      result = result.filter((task) => task.status !== "completed");
+    }
+
+    // Apply priority filter
+    if (priorityFilter) {
+      result = result.filter((task) => task.priority === priorityFilter);
+    }
+
+    // Apply assignment filter
+    if (assignmentFilter) {
+      if (assignmentFilter === "assignedByMe") {
+        result = result.filter(
+          (task) =>
+            task.createdBy === user.id &&
+            task.assignedTo &&
+            task.assignedTo !== user.id
+        );
+      } else if (assignmentFilter === "assignedToMe") {
+        result = result.filter(
+          (task) => task.assignedTo === user.id && task.createdBy !== user.id
+        );
+      } else if (assignmentFilter === "unassigned") {
+        result = result.filter((task) => !task.assignedTo);
+      }
+    }
+
+    // Sort tasks
+    result.sort((a, b) => {
+      // First sort by status - put completed tasks at the bottom
+      if (a.status === "completed" && b.status !== "completed") return 1;
+      if (a.status !== "completed" && b.status === "completed") return -1;
+
+      // Then sort by the selected sort option
+      if (sortOption === "dueDate") {
+        // Handle tasks without due dates
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+
+        // Sort by due date
+        const result = a.dueDate - b.dueDate;
+        return sortDirection === "asc" ? result : -result;
+      } else if (sortOption === "priority") {
+        // Convert priority to numeric value for sorting
+        const priorityValues = { high: 3, medium: 2, low: 1 };
+        const result = priorityValues[b.priority] - priorityValues[a.priority];
+        return sortDirection === "asc" ? -result : result;
+      } else if (sortOption === "createdAt") {
+        const result = (b.createdAt || 0) - (a.createdAt || 0);
+        return sortDirection === "asc" ? -result : result;
+      } else {
+        // Default sort by status
+        return a.status.localeCompare(b.status);
+      }
+    });
+
+    setDisplayedTasks(result);
+  }, [
+    tasks,
+    filteredTasks,
+    sortOption,
+    sortDirection,
+    searchQuery,
+    activeFilters,
+    statusFilter,
+    priorityFilter,
+    assignmentFilter,
+    completedCollapsed,
+    user,
+  ]);
 
   const getStatusColor = (status: string) => {
     const colors = theme.colors.customColors.task;
@@ -183,7 +290,6 @@ const TasksListScreen = ({ navigation }: any) => {
   };
 
   const handleTaskPress = (taskId: string) => {
-    // Use the correct navigation pattern for nested navigators
     navigation.navigate("TaskDetail", { taskId });
   };
 
@@ -231,6 +337,59 @@ const TasksListScreen = ({ navigation }: any) => {
     return "#34C759"; // Green
   };
 
+  // Function to display assignment relationship
+  const getAssignmentText = (task: Task): string => {
+    if (!user) return "";
+
+    // Check if this is a group task
+    const isGroupTask = !!task.groupId;
+
+    // Get the actual group name if available
+    const groupName = task.groupId
+      ? groupNames[task.groupId] || "Group"
+      : "Group";
+
+    // For tasks with no assignee
+    if (!task.assignedTo) {
+      return "Not assigned to anyone";
+    }
+
+    if (task.createdBy === user.id && task.assignedTo === user.id) {
+      return "Assigned to yourself";
+    } else if (task.createdBy === user.id && task.assignedTo) {
+      if (isGroupTask) {
+        return `You assigned to ${groupName}`;
+      } else {
+        return `You assigned to ${task.assignedToName || "someone"}`;
+      }
+    } else if (task.assignedTo === user.id) {
+      if (isGroupTask) {
+        return `Assigned to you by ${groupName}`;
+      } else {
+        return `Assigned to you by ${
+          task.createdBy === user.id ? "yourself" : "someone"
+        }`;
+      }
+    } else if (task.assignedTo) {
+      if (isGroupTask) {
+        return `${
+          task.createdBy === user.id ? "You" : "Someone"
+        } assigned to ${groupName}`;
+      } else {
+        return `${task.createdBy === user.id ? "You" : "Someone"} assigned to ${
+          task.assignedToName
+        }`;
+      }
+    }
+
+    return "";
+  };
+
+  // Function to check if a task is a group task
+  const isGroupTask = (task: Task): boolean => {
+    return !!task.groupId;
+  };
+
   const renderTaskItem = ({ item }: { item: Task }) => (
     <TouchableOpacity
       style={[
@@ -243,7 +402,12 @@ const TasksListScreen = ({ navigation }: any) => {
         <Avatar.Text
           size={50}
           label={getCategoryIcon(item.category || "other")}
-          style={{ backgroundColor: getStatusColor(item.status) }}
+          style={{
+            backgroundColor:
+              item.status === "completed"
+                ? "#4CAF50" // Green for completed tasks
+                : getStatusColor(item.status),
+          }}
         />
         <View style={styles.taskContent}>
           <View style={styles.taskHeader}>
@@ -258,17 +422,50 @@ const TasksListScreen = ({ navigation }: any) => {
               </Text>
             )}
           </View>
-          <View style={styles.taskPreview}>
+
+          {/* Assignment relationship with group indicator */}
+          <View style={styles.assignmentRow}>
             <Text
-              numberOfLines={1}
               style={[
-                styles.taskDescription,
+                styles.assignmentText,
                 { color: theme.colors.textSecondary },
               ]}
             >
-              {item.description || `${item.priority} priority task`}
+              {getAssignmentText(item)}
             </Text>
-            {item.dueDate && (
+          </View>
+
+          <View style={styles.taskPreview}>
+            <View style={styles.taskMeta}>
+              <Text
+                style={[
+                  styles.priorityText,
+                  {
+                    color:
+                      item.priority === "high"
+                        ? "#FF3B30"
+                        : item.priority === "medium"
+                        ? "#FFCC00"
+                        : "#34C759",
+                  },
+                ]}
+              >
+                {item.priority.charAt(0).toUpperCase() + item.priority.slice(1)}
+              </Text>
+
+              {item.status === "completed" && item.completedAt && (
+                <Text
+                  style={[
+                    styles.completedText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Completed {formatDate(item.completedAt, "MMM d")}
+                </Text>
+              )}
+            </View>
+
+            {item.dueDate && item.status !== "completed" && (
               <Badge
                 style={{
                   backgroundColor: getDueDateColor(item.dueDate),
@@ -289,6 +486,64 @@ const TasksListScreen = ({ navigation }: any) => {
     </TouchableOpacity>
   );
 
+  const renderEmptyList = () => (
+    <View style={[styles.centered, { flex: 1, paddingTop: 40 }]}>
+      <Text style={{ color: theme.colors.textSecondary, marginBottom: 16 }}>
+        {searchQuery || statusFilter || priorityFilter || assignmentFilter
+          ? "No tasks match your filters"
+          : "No tasks yet"}
+      </Text>
+      <Button
+        mode="contained"
+        onPress={() => navigation.navigate("CreateTask")}
+        style={{ backgroundColor: theme.colors.primary }}
+      >
+        Create Your First Task
+      </Button>
+    </View>
+  );
+
+  const renderSectionHeader = ({ section }: { section: TaskSection }) => (
+    <TouchableOpacity
+      style={[
+        styles.sectionHeader,
+        { backgroundColor: theme.dark ? "#1E1E1E" : "#F5F5F5" },
+      ]}
+      onPress={
+        section.type === "completed" ? toggleCompletedSection : undefined
+      }
+      activeOpacity={section.type === "completed" ? 0.7 : 1}
+    >
+      <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>
+        {section.title}
+      </Text>
+
+      {section.type === "completed" && (
+        <View style={styles.collapseButton}>
+          {section.isCollapsed ? (
+            <>
+              <ChevronDown
+                width={20}
+                height={20}
+                stroke={theme.colors.primary}
+              />
+              <Text style={{ color: theme.colors.primary, marginLeft: 4 }}>
+                Show ({tasks.filter((t) => t.status === "completed").length})
+              </Text>
+            </>
+          ) : (
+            <>
+              <ChevronUp width={20} height={20} stroke={theme.colors.primary} />
+              <Text style={{ color: theme.colors.primary, marginLeft: 4 }}>
+                Hide
+              </Text>
+            </>
+          )}
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
   const getSortOptionLabel = (option: SortOption): string => {
     switch (option) {
       case "createdAt":
@@ -302,6 +557,41 @@ const TasksListScreen = ({ navigation }: any) => {
       default:
         return "Date Created";
     }
+  };
+
+  // Function to handle filter selection
+  const handleFilterSelect = (type: FilterType, value: string | null) => {
+    // Reset all filters first
+    if (type !== activeFilterType) {
+      setStatusFilter(null);
+      setPriorityFilter(null);
+      setAssignmentFilter(null);
+    }
+
+    // Set the active filter type
+    setActiveFilterType(type);
+
+    // Apply the selected filter
+    if (type === "status") {
+      setStatusFilter(value);
+    } else if (type === "priority") {
+      setPriorityFilter(value);
+    } else if (type === "assignment") {
+      setAssignmentFilter(value);
+    }
+  };
+
+  // Function to clear all filters
+  const clearAllFilters = () => {
+    setActiveFilterType(null);
+    setStatusFilter(null);
+    setPriorityFilter(null);
+    setAssignmentFilter(null);
+  };
+
+  // Function to handle search focus
+  const handleSearchFocus = (focused: boolean) => {
+    setIsSearchFocused(focused);
   };
 
   if (isLoading && tasks.length === 0 && !refreshing) {
@@ -340,7 +630,243 @@ const TasksListScreen = ({ navigation }: any) => {
         <Text style={[styles.title, { color: "white" }]}>Tasks</Text>
       </View>
 
-      <TaskSearchBar />
+      <TaskSearchBar
+        onFocus={() => handleSearchFocus(true)}
+        onBlur={() => handleSearchFocus(false)}
+      />
+
+      {/* Status and Priority filters - Only visible when search is focused */}
+      {isSearchFocused && (
+        <View style={styles.statusPriorityFilters}>
+          <Chip
+            selected={activeFilterType === "status" && statusFilter === "todo"}
+            onPress={() => handleFilterSelect("status", "todo")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "status" && statusFilter === "todo"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "status" && statusFilter === "todo"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            To Do
+          </Chip>
+
+          <Chip
+            selected={
+              activeFilterType === "status" && statusFilter === "inProgress"
+            }
+            onPress={() => handleFilterSelect("status", "inProgress")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "status" && statusFilter === "inProgress"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "status" && statusFilter === "inProgress"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            In Progress
+          </Chip>
+
+          <Chip
+            selected={
+              activeFilterType === "status" && statusFilter === "completed"
+            }
+            onPress={() => handleFilterSelect("status", "completed")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "status" && statusFilter === "completed"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "status" && statusFilter === "completed"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            Completed
+          </Chip>
+
+          <Chip
+            selected={
+              activeFilterType === "priority" && priorityFilter === "high"
+            }
+            onPress={() => handleFilterSelect("priority", "high")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "priority" && priorityFilter === "high"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "priority" && priorityFilter === "high"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            High Priority
+          </Chip>
+
+          <Chip
+            selected={
+              activeFilterType === "priority" && priorityFilter === "medium"
+            }
+            onPress={() => handleFilterSelect("priority", "medium")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "priority" && priorityFilter === "medium"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "priority" && priorityFilter === "medium"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            Medium
+          </Chip>
+
+          <Chip
+            selected={
+              activeFilterType === "priority" && priorityFilter === "low"
+            }
+            onPress={() => handleFilterSelect("priority", "low")}
+            style={[
+              styles.filterChip,
+              activeFilterType === "priority" && priorityFilter === "low"
+                ? { backgroundColor: theme.colors.primary }
+                : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+            ]}
+            textStyle={{
+              color:
+                activeFilterType === "priority" && priorityFilter === "low"
+                  ? theme.colors.onPrimary
+                  : theme.colors.text,
+            }}
+            compact
+          >
+            Low
+          </Chip>
+        </View>
+      )}
+
+      {/* Assignment filters - Always visible */}
+      <View style={styles.assignmentFilters}>
+        <Chip
+          selected={
+            activeFilterType === "assignment" &&
+            assignmentFilter === "assignedByMe"
+          }
+          onPress={() => handleFilterSelect("assignment", "assignedByMe")}
+          style={[
+            styles.filterChip,
+            activeFilterType === "assignment" &&
+            assignmentFilter === "assignedByMe"
+              ? { backgroundColor: theme.colors.primary }
+              : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+          ]}
+          textStyle={{
+            color:
+              activeFilterType === "assignment" &&
+              assignmentFilter === "assignedByMe"
+                ? theme.colors.onPrimary
+                : theme.colors.text,
+          }}
+          icon="arrow-right"
+          compact
+        >
+          By Me
+        </Chip>
+
+        <Chip
+          selected={
+            activeFilterType === "assignment" &&
+            assignmentFilter === "assignedToMe"
+          }
+          onPress={() => handleFilterSelect("assignment", "assignedToMe")}
+          style={[
+            styles.filterChip,
+            activeFilterType === "assignment" &&
+            assignmentFilter === "assignedToMe"
+              ? { backgroundColor: theme.colors.primary }
+              : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+          ]}
+          textStyle={{
+            color:
+              activeFilterType === "assignment" &&
+              assignmentFilter === "assignedToMe"
+                ? theme.colors.onPrimary
+                : theme.colors.text,
+          }}
+          icon="arrow-left"
+          compact
+        >
+          To Me
+        </Chip>
+
+        <Chip
+          selected={
+            activeFilterType === "assignment" &&
+            assignmentFilter === "unassigned"
+          }
+          onPress={() => handleFilterSelect("assignment", "unassigned")}
+          style={[
+            styles.filterChip,
+            activeFilterType === "assignment" &&
+            assignmentFilter === "unassigned"
+              ? { backgroundColor: theme.colors.primary }
+              : { backgroundColor: theme.dark ? "#333" : "#f0f0f0" },
+          ]}
+          textStyle={{
+            color:
+              activeFilterType === "assignment" &&
+              assignmentFilter === "unassigned"
+                ? theme.colors.onPrimary
+                : theme.colors.text,
+          }}
+          icon="help-circle-outline"
+          compact
+        >
+          Unassigned
+        </Chip>
+      </View>
+
+      {/* Active filters indicator */}
+      {(statusFilter || priorityFilter || assignmentFilter) && (
+        <View style={styles.activeFiltersRow}>
+          <Text style={{ color: theme.colors.textSecondary }}>
+            Active filters:
+          </Text>
+          <Button
+            mode="text"
+            compact
+            onPress={clearAllFilters}
+            textColor={theme.colors.primary}
+          >
+            Clear All
+          </Button>
+        </View>
+      )}
 
       <View style={styles.sortContainer}>
         <Text style={{ marginRight: 8, color: theme.colors.text }}>
@@ -409,12 +935,13 @@ const TasksListScreen = ({ navigation }: any) => {
         </TouchableOpacity>
       </View>
 
-      {sortedTasks.length > 0 ? (
+      {/* Task list */}
+      {displayedTasks.length > 0 ? (
         <FlatList
-          data={sortedTasks}
+          data={displayedTasks}
           renderItem={renderTaskItem}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.taskList}
+          contentContainerStyle={[styles.taskList, { paddingBottom: 100 }]} // Added padding to avoid FAB overlap
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -422,13 +949,32 @@ const TasksListScreen = ({ navigation }: any) => {
               colors={[theme.colors.primary]}
             />
           }
+          ListFooterComponent={
+            completedCollapsed &&
+            tasks.some((t) => t.status === "completed") ? (
+              <TouchableOpacity
+                style={[
+                  styles.showCompletedButton,
+                  { backgroundColor: theme.dark ? "#333" : "#f5f5f5" },
+                ]}
+                onPress={toggleCompletedSection}
+              >
+                <Text style={{ color: theme.colors.primary }}>
+                  Show Completed Tasks (
+                  {tasks.filter((t) => t.status === "completed").length})
+                </Text>
+                <ChevronDown
+                  width={16}
+                  height={16}
+                  stroke={theme.colors.primary}
+                  style={{ marginLeft: 8 }}
+                />
+              </TouchableOpacity>
+            ) : null
+          }
         />
       ) : (
-        <View style={[styles.centered, { flex: 1 }]}>
-          <Text style={{ color: theme.colors.textSecondary }}>
-            {searchQuery ? "No tasks match your search" : "No tasks yet"}
-          </Text>
-        </View>
+        renderEmptyList()
       )}
 
       <FAB
@@ -456,6 +1002,23 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: "bold",
+  },
+  statusPriorityFilters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  assignmentFilters: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  filterChip: {
+    marginBottom: 4,
   },
   sortContainer: {
     flexDirection: "row",
@@ -496,26 +1059,51 @@ const styles = StyleSheet.create({
   taskTitle: {
     fontSize: 16,
     fontWeight: "bold",
-    // color is applied dynamically in the component
+    flex: 1,
+    marginRight: 8,
   },
   taskTime: {
     fontSize: 12,
-    // color is applied dynamically in the component
+  },
+  assignmentRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  assignmentText: {
+    fontSize: 13,
   },
   taskPreview: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  taskDescription: {
-    fontSize: 14,
-    // color is applied dynamically in the component
+  taskMeta: {
+    flexDirection: "row",
+    alignItems: "center",
     flex: 1,
+  },
+  priorityText: {
+    fontSize: 12,
+    fontWeight: "500",
+    marginRight: 8,
+  },
+  completedText: {
+    fontSize: 12,
+    fontStyle: "italic",
   },
   divider: {
     height: 1,
-    // backgroundColor is applied dynamically in the component
     marginLeft: 76,
+  },
+  showCompletedButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 8,
   },
   fab: {
     position: "absolute",
@@ -523,6 +1111,29 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     borderRadius: 30,
+  },
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(0,0,0,0.1)",
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+  },
+  collapseButton: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  activeFiltersRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
 });
 

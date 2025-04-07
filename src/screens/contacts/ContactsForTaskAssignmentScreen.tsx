@@ -132,10 +132,7 @@ const ContactsForTaskAssignmentScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
         <Appbar.Content title="Assign Task" color="white" />
       </Appbar.Header>
 

@@ -30,7 +30,6 @@ import {
   scheduleCustomTaskReminder,
   cancelTaskReminder,
 } from "../../services/NotificationService";
-import { v4 as uuidv4 } from "uuid";
 
 const EditTaskScreen = ({ navigation, route }: any) => {
   const { taskId } = route.params;
@@ -147,8 +146,11 @@ const EditTaskScreen = ({ navigation, route }: any) => {
     hours: number,
     minutes: number
   ) => {
+    // Create a simple ID based on the time values instead of using UUID
+    const simpleId = `reminder_${days}_${hours}_${minutes}_${Date.now()}`;
+
     const newReminder = {
-      id: uuidv4(),
+      id: simpleId,
       days,
       hours,
       minutes,
@@ -297,12 +299,8 @@ const EditTaskScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Edit Task" color="white"
- />
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Edit Task" color="white" />
       </Appbar.Header>
 
       <ScrollView style={{ backgroundColor: theme.colors.background }}>
@@ -313,7 +311,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
             label="Task Title"
             value={title}
             onChangeText={setTitle}
-            theme={{ colors: { text: theme.colors.text } }}
           />
 
           <TextInput
@@ -324,7 +321,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
             onChangeText={setDescription}
             multiline
             numberOfLines={4}
-            theme={{ colors: { text: theme.colors.text } }}
           />
 
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
@@ -409,11 +405,7 @@ const EditTaskScreen = ({ navigation, route }: any) => {
             {tags.map((tag, index) => (
               <Chip
                 key={index}
-                style={[
-                  styles.tagChip,
-                  { backgroundColor: theme.dark ? "#444444" : "#f0f0f0" },
-                ]}
-                textStyle={{ color: theme.colors.text }}
+                style={styles.tagChip}
                 onClose={() => handleRemoveTag(tag)}
               >
                 {tag}
@@ -427,14 +419,12 @@ const EditTaskScreen = ({ navigation, route }: any) => {
               label="Add Tag"
               value={newTag}
               onChangeText={setNewTag}
-              theme={{ colors: { text: theme.colors.text } }}
             />
             <Button
               mode="contained"
               onPress={handleAddTag}
               style={styles.addTagButton}
               disabled={!newTag.trim()}
-              buttonColor={theme.colors.primary}
             >
               Add
             </Button>
@@ -462,12 +452,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
               mode={priority === "low" ? "contained" : "outlined"}
               onPress={() => setPriority("low")}
               style={styles.priorityButton}
-              buttonColor={
-                priority === "low" ? theme.colors.primary : undefined
-              }
-              textColor={
-                priority === "low" ? theme.colors.onPrimary : theme.colors.text
-              }
             >
               Low
             </Button>
@@ -475,14 +459,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
               mode={priority === "medium" ? "contained" : "outlined"}
               onPress={() => setPriority("medium")}
               style={styles.priorityButton}
-              buttonColor={
-                priority === "medium" ? theme.colors.primary : undefined
-              }
-              textColor={
-                priority === "medium"
-                  ? theme.colors.onPrimary
-                  : theme.colors.text
-              }
             >
               Medium
             </Button>
@@ -490,12 +466,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
               mode={priority === "high" ? "contained" : "outlined"}
               onPress={() => setPriority("high")}
               style={styles.priorityButton}
-              buttonColor={
-                priority === "high" ? theme.colors.primary : undefined
-              }
-              textColor={
-                priority === "high" ? theme.colors.onPrimary : theme.colors.text
-              }
             >
               High
             </Button>
@@ -508,7 +478,6 @@ const EditTaskScreen = ({ navigation, route }: any) => {
             mode="outlined"
             onPress={() => setShowDatePicker(true)}
             style={styles.dateButton}
-            textColor={theme.colors.text}
           >
             {dueDate && isValid(dueDate)
               ? dueDate.toLocaleDateString()

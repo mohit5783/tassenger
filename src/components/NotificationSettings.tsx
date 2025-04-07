@@ -44,6 +44,10 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
     }
   };
 
+  const handleAddCustomClick = () => {
+    onAddCustomReminder();
+  };
+
   return (
     <View
       style={[
@@ -115,7 +119,7 @@ const NotificationSettings: React.FC<NotificationSettingsProps> = ({
 
           <TouchableOpacity
             style={styles.addCustomButton}
-            onPress={onAddCustomReminder}
+            onPress={handleAddCustomClick}
             activeOpacity={0.7}
           >
             <Plus
@@ -138,6 +142,7 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: 16,
     overflow: "hidden",
+    backgroundColor: "#F5F5F5",
   },
   headerRow: {
     flexDirection: "row",

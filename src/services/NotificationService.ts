@@ -1,4 +1,5 @@
 import * as Notifications from "expo-notifications";
+import { SchedulableTriggerInputTypes } from "expo-notifications";
 import { Platform } from "react-native";
 import type { Task } from "../store/slices/taskSlice";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -39,7 +40,7 @@ export async function setupNotificationChannelsExpo() {
       name: "Updates",
       description: "General app updates and announcements",
       importance: Notifications.AndroidImportance.DEFAULT,
-      sound: "default",
+      sound: null,
     });
   }
 }
@@ -115,7 +116,10 @@ export async function scheduleTaskReminder(task: Task) {
       body: `"${task.title}" is due in 1 hour`,
       data: { taskId: task.id },
     },
-    trigger: null,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: reminderDate,
+    },
   });
 
   return identifier;
@@ -177,16 +181,30 @@ export async function scheduleCustomTaskReminder(
     timeDescription += "before";
   }
 
-  const identifier = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: "Task Reminder",
-      body: `"${task.title}" is due ${timeDescription}`,
-      data: { taskId: task.id },
-    },
-    trigger: null,
-  });
+  // Create a simple identifier without UUID
+  const identifier = `reminder_${task.id}_${Date.now()}_${Math.floor(
+    Math.random() * 10000
+  )}`;
 
-  return identifier;
+  try {
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: "Task Reminder",
+        body: `"${task.title}" is due ${timeDescription}`,
+        data: { taskId: task.id },
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: reminderDate,
+      },
+      identifier: identifier, // Use our custom identifier
+    });
+
+    return identifier;
+  } catch (error) {
+    console.error("Error scheduling notification:", error);
+    return null;
+  }
 }
 
 export async function cancelTaskReminder(identifier: string) {

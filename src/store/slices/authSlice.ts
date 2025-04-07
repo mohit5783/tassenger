@@ -1,8 +1,4 @@
-import {
-  createSlice,
-  createAsyncThunk,
-  type PayloadAction,
-} from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import * as EmailAuthService from "../../services/EmailAuthService";
 
 // Use the appropriate auth service
@@ -144,12 +140,7 @@ const authSlice = createSlice({
     clearVerificationId: (state) => {
       state.verificationId = null;
     },
-    // Add this new reducer for development purposes
-    setMockUser: (state, action: PayloadAction<UserProfile>) => {
-      state.user = action.payload;
-      state.isAuthenticated = true;
-      state.isLoading = false;
-    },
+    // Remove the mock user reducer for production
   },
   extraReducers: (builder) => {
     builder
@@ -229,6 +220,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { clearError, clearVerificationId, setMockUser } =
-  authSlice.actions;
+export const { clearError, clearVerificationId } = authSlice.actions;
 export default authSlice.reducer;

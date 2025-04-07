@@ -6,7 +6,16 @@ import {
   updateProfile,
 } from "firebase/auth";
 import { auth, db } from "../api/firebase/config";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 
 // User profile interface
 export interface UserProfile {
@@ -42,6 +51,21 @@ export const signUp = async (
   hasCompletedProfile = false
 ): Promise<AuthResult> => {
   try {
+    // First, check if the phone number already exists in the database
+    if (phoneNumber) {
+      const formattedPhone = phoneNumber.trim();
+      // Query Firestore to check if this phone number is already registered
+      const usersRef = collection(db, "users");
+      const q = query(usersRef, where("phoneNumber", "==", formattedPhone));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        throw new Error(
+          "This phone number is already registered. Please use a different phone number."
+        );
+      }
+    }
+
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       email,

@@ -15,7 +15,7 @@ const TaskCard = ({ task, onPress }: TaskCardProps) => {
 
   const getStatusColor = (status: string) => {
     const colors = theme.colors.customColors.task;
-    return colors[status as keyof typeof colors] || colors.todo;
+    return colors[status as keyof typeof colors] || colors.todo || "#cccccc"; // Add fallback color
   };
 
   const getPriorityColor = (priority: string) => {
@@ -48,12 +48,25 @@ const TaskCard = ({ task, onPress }: TaskCardProps) => {
 
   return (
     <TouchableOpacity onPress={onPress} disabled={!onPress}>
-      <Card style={styles.card}>
+      <Card
+        style={[
+          styles.card,
+          { backgroundColor: theme.dark ? theme.colors.card : "white" },
+        ]}
+      >
         <Card.Content>
-          <Text style={styles.title}>{task.title}</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>
+            {task.title}
+          </Text>
 
           {task.description && (
-            <Text style={styles.description} numberOfLines={2}>
+            <Text
+              style={[
+                styles.description,
+                { color: theme.colors.textSecondary },
+              ]}
+              numberOfLines={2}
+            >
               {task.description}
             </Text>
           )}
@@ -115,22 +128,20 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
     marginTop: 8,
+    alignItems: "center",
   },
   statusChip: {
     height: 28,
-    marginBottom: 4,
   },
   priorityChip: {
     height: 28,
     backgroundColor: "transparent",
     borderWidth: 1,
-    marginBottom: 4,
   },
   categoryChip: {
     height: 28,
     backgroundColor: "transparent",
     borderWidth: 1,
-    marginBottom: 4,
   },
 });
 
