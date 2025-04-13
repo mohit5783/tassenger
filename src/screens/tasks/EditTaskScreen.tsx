@@ -14,6 +14,7 @@ import {
   Button,
   Appbar,
   SegmentedButtons,
+  Menu,
   Modal,
   Portal,
 } from "react-native-paper";
@@ -24,23 +25,26 @@ import {
   updateTask,
   type TaskStatus,
   type TaskPriority,
+  type TaskReminder,
 } from "../../store/slices/taskSlice";
-import { isValid } from "date-fns";
+import { isValid, format } from "date-fns";
 import ContactSelector from "../../components/ContactSelector";
 import type { Contact } from "../../services/ContactsService";
 import DateTimePickerModal from "@/components/DateTimePickerModal";
-
-import { format } from "date-fns";
 import type { RecurrenceOptions } from "../../types/recurrence";
 import NotificationPickerModal from "@/components/NotificationPickerModal";
 import { User } from "react-native-feather";
+import CustomRecurrenceModal from "@/components/CustomRecurrenceModal";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import ReminderItem from "@/components/ReminderItem";
 
 const EditTaskScreen = ({ navigation, route }: any) => {
   const { taskId } = route.params;
-  const { theme } = useTheme();
+  const { theme, taskReminderDefault } = useTheme();
   const dispatch = useAppDispatch();
   const { currentTask, isLoading } = useAppSelector((state) => state.tasks);
   const { user } = useAppSelector((state) => state.auth);
+  const { contacts } = useAppSelector((state) => state.contacts);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -59,7 +63,63 @@ const EditTaskScreen = ({ navigation, route }: any) => {
   const [recurrenceModalVisible, setRecurrenceModalVisible] = useState(false);
   const [notificationPickerVisible, setNotificationPickerVisible] =
     useState(false);
-  const [selectedReminders, setSelectedReminders] = useState<string[]>([]);
+  const [selectedReminders, setSelectedReminders] = useState<TaskReminder[]>(
+    []
+  );
+  const [menuVisible, setMenuVisible] = useState(false);
+
+  const defaultReminderTimes = [
+    { id: "at_time", days: 0, hours: 0, minutes: 0, label: "At time of event" },
+    {
+      id: "5_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 5,
+      label: "5 minutes before",
+    },
+    {
+      id: "10_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 10,
+      label: "10 minutes before",
+    },
+    {
+      id: "15_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 15,
+      label: "15 minutes before",
+    },
+    {
+      id: "30_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 30,
+      label: "30 minutes before",
+    },
+    {
+      id: "1_hour_before",
+      days: 0,
+      hours: 1,
+      minutes: 0,
+      label: "1 hour before",
+    },
+    {
+      id: "1_day_before",
+      days: 1,
+      hours: 0,
+      minutes: 0,
+      label: "1 day before",
+    },
+    {
+      id: "2_days_before",
+      days: 2,
+      hours: 0,
+      minutes: 0,
+      label: "2 days before",
+    },
+  ];
 
   useEffect(() => {
     dispatch(fetchTask(taskId));
@@ -83,19 +143,27 @@ const EditTaskScreen = ({ navigation, route }: any) => {
         });
       }
 
-      if (currentTask.isRecurring && currentTask.recurrencePatternId) {
-        // In a real app, you would fetch the recurrence pattern from Firestore
-        // For now, we'll just set a default
-        setRecurrenceOptions({
-          type: "weekly",
-          frequency: 1,
-          endType: "never",
-        });
+      if (currentTask.isRecurring && currentTask.recurrencePattern) {
+        setRecurrenceOptions(currentTask.recurrencePattern);
       } else {
         setRecurrenceOptions(null);
       }
+
+      // Load reminders if they exist
+      if (currentTask.reminders && currentTask.reminders.length > 0) {
+        setSelectedReminders(currentTask.reminders);
+      } else {
+        // Set default reminder if none exist and there's a due date
+        if (taskReminderDefault && currentTask.dueDate) {
+          setSelectedReminders([
+            { id: `reminder_${Date.now()}`, value: taskReminderDefault },
+          ]);
+        } else {
+          setSelectedReminders([]);
+        }
+      }
     }
-  }, [currentTask]);
+  }, [currentTask, taskReminderDefault]);
 
   const handleUpdateTask = async () => {
     if (!title.trim() || !user) return;
@@ -107,7 +175,14 @@ const EditTaskScreen = ({ navigation, route }: any) => {
         status,
         priority,
         dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
+        reminders: selectedReminders.length > 0 ? selectedReminders : null,
+        reminderSet: selectedReminders.length > 0,
+        isRecurring: !!recurrenceOptions,
       };
+
+      if (recurrenceOptions) {
+        updates.recurrencePattern = recurrenceOptions;
+      }
 
       if (assignedUser?.id) {
         updates.assignedTo = assignedUser.id;
@@ -147,12 +222,37 @@ const EditTaskScreen = ({ navigation, route }: any) => {
     setContactSelectorVisible(false);
   };
 
-  const getRecurrenceDescription = (
-    options: RecurrenceOptions,
-    date: Date
-  ): string => {
-    if (!options) return "Does not repeat";
+  // Handle recurrence options change
+  const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
+    setRecurrenceOptions(options);
+    setRecurrenceModalVisible(false);
+  };
 
+  const getRecurrenceDescription = (
+    options: RecurrenceOptions | null,
+    date: Date | null
+  ): string => {
+    if (!options || !date) return "Does not repeat";
+
+    // For weekly recurrence with specific days
+    if (
+      options.type === "weekly" &&
+      options.weekDays &&
+      options.weekDays.length > 0
+    ) {
+      const dayNames = options.weekDays
+        .map(
+          (dayIndex) =>
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayIndex]
+        )
+        .join(", ");
+
+      return options.frequency === 1
+        ? `Weekly on ${dayNames}`
+        : `Every ${options.frequency} weeks on ${dayNames}`;
+    }
+
+    // For other recurrence types
     switch (options.type) {
       case "daily":
         return options.frequency === 1
@@ -175,24 +275,23 @@ const EditTaskScreen = ({ navigation, route }: any) => {
     }
   };
 
-  if (isLoading && !currentTask) {
-    return (
-      <View
-        style={[styles.container, { backgroundColor: theme.colors.background }]}
-      >
-        <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
-          <Appbar.BackAction
-            color={theme.colors.onPrimary}
-            onPress={() => navigation.goBack()}
-          />
-          <Appbar.Content title="Edit Task" color={theme.colors.onPrimary} />
-        </Appbar.Header>
-        <View style={styles.centered}>
-          <Text>Loading task...</Text>
-        </View>
-      </View>
+  const handleAddReminder = () => {
+    const newId = `reminder_${Date.now()}`;
+    setSelectedReminders((prev) => [
+      ...prev,
+      { id: newId, value: "10 minutes before" },
+    ]);
+  };
+
+  const handleSelectReminder = (id: string, value: string) => {
+    setSelectedReminders((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, value } : r))
     );
-  }
+  };
+
+  const handleRemoveReminder = (id: string) => {
+    setSelectedReminders((prev) => prev.filter((r) => r.id !== id));
+  };
 
   return (
     <View
@@ -288,17 +387,94 @@ const EditTaskScreen = ({ navigation, route }: any) => {
               : "Set Due Date & Time"}
           </Button>
 
+          {/* Recurrence Section */}
           {dueDate && (
-            <Button
-              mode="outlined"
-              onPress={() => setRecurrenceModalVisible(true)}
-              style={styles.recurrenceButton}
-              icon="repeat"
-            >
-              {recurrenceOptions
-                ? getRecurrenceDescription(recurrenceOptions, dueDate)
-                : "Does not repeat"}
-            </Button>
+            <View style={styles.recurrenceSection}>
+              <Text
+                style={[styles.sectionTitle, { color: theme.colors.primary }]}
+              >
+                Repeat
+              </Text>
+              <Menu
+                visible={menuVisible}
+                onDismiss={() => setMenuVisible(false)}
+                anchor={
+                  <Button
+                    mode="outlined"
+                    onPress={() => setMenuVisible(true)}
+                    style={styles.recurrenceDropdown}
+                    icon={() => (
+                      <Icon name="repeat" size={20} color={theme.colors.text} />
+                    )}
+                    textColor={theme.colors.text}
+                    contentStyle={styles.recurrenceButtonContent}
+                  >
+                    {getRecurrenceDescription(recurrenceOptions, dueDate)}
+                    <Text style={{ color: theme.colors.text }}> ▼</Text>
+                  </Button>
+                }
+              >
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions(null);
+                    setMenuVisible(false);
+                  }}
+                  title="Does not repeat"
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "daily",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title="Daily"
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "weekly",
+                      frequency: 1,
+                      endType: "never",
+                      weekDays: [dueDate.getDay()],
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Weekly on ${format(dueDate, "EEEE")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "monthly",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Monthly on the ${format(dueDate, "do")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "yearly",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Annually on ${format(dueDate, "MMMM d")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceModalVisible(true);
+                    setMenuVisible(false);
+                  }}
+                  title="Custom..."
+                />
+              </Menu>
+            </View>
           )}
 
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
@@ -333,6 +509,32 @@ const EditTaskScreen = ({ navigation, route }: any) => {
             </View>
           </TouchableOpacity>
 
+          {/* Reminders Section */}
+          <View>
+            <Text
+              style={[styles.sectionTitle, { color: theme.colors.primary }]}
+            >
+              Reminders
+            </Text>
+            {selectedReminders.map((reminder) => (
+              <ReminderItem
+                key={reminder.id}
+                id={reminder.id}
+                value={reminder.value}
+                onRemove={handleRemoveReminder}
+                onChange={handleSelectReminder}
+              />
+            ))}
+            <Button
+              mode="outlined"
+              onPress={handleAddReminder}
+              style={styles.addReminderButton}
+              icon="bell-plus"
+            >
+              Add Reminder
+            </Button>
+          </View>
+
           <Button
             mode="contained"
             style={[
@@ -355,6 +557,7 @@ const EditTaskScreen = ({ navigation, route }: any) => {
         initialDate={dueDate || new Date()}
       />
 
+      {/* Important: Only render the Modal when contactSelectorVisible is true */}
       {contactSelectorVisible && (
         <Portal>
           <Modal
@@ -370,14 +573,34 @@ const EditTaskScreen = ({ navigation, route }: any) => {
           </Modal>
         </Portal>
       )}
+
       <NotificationPickerModal
         visible={notificationPickerVisible}
         onDismiss={() => setNotificationPickerVisible(false)}
         onConfirm={(selected) => {
-          setSelectedReminders(selected);
+          setSelectedReminders(
+            selected.map((id) => {
+              const reminderTime = defaultReminderTimes.find(
+                (r) => r.id === id
+              );
+              return {
+                id,
+                value: reminderTime ? reminderTime.label : "Custom reminder",
+              };
+            })
+          );
           setNotificationPickerVisible(false);
         }}
-        initialSelected={selectedReminders}
+        initialSelected={selectedReminders.map((r) => r.id)}
+      />
+
+      {/* Use CustomRecurrenceModal directly without nesting in another modal */}
+      <CustomRecurrenceModal
+        visible={recurrenceModalVisible}
+        onDismiss={() => setRecurrenceModalVisible(false)}
+        onConfirm={handleRecurrenceChange}
+        initialDate={dueDate || new Date()}
+        initialOptions={recurrenceOptions}
       />
     </View>
   );
@@ -388,7 +611,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   centered: {
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
@@ -438,15 +660,25 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   recurrenceButton: {
-    marginBottom: 16,
+    width: "80%",
+    alignSelf: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
   },
-  notificationButton: {
-    marginBottom: 24,
-    paddingVertical: 8,
+  recurrenceButtonContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
   },
-  assignmentButton: {
+  recurrenceSection: {
     marginBottom: 24,
-    overflow: "hidden",
+  },
+  recurrenceDropdown: {
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
   },
   assignmentButtonContent: {
     flexDirection: "row",
@@ -460,6 +692,22 @@ const styles = StyleSheet.create({
   },
   assignmentIcon: {
     marginRight: 12,
+  },
+  notificationButton: {
+    marginBottom: 16,
+    paddingVertical: 8,
+  },
+  createButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  assignmentButton: {
+    marginBottom: 16,
+  },
+  addReminderButton: {
+    marginTop: 8,
+    marginBottom: 16,
   },
 });
 

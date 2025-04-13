@@ -6,7 +6,6 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
@@ -34,7 +33,14 @@ import {
 } from "../../store/slices/taskSlice";
 import { generateNextOccurrence } from "../../store/slices/recurrenceSlice";
 import { format, isValid } from "date-fns";
-import { MoreVertical } from "react-native-feather";
+import {
+  MoreVertical,
+  User,
+  Calendar,
+  Clock,
+  Bell,
+  Repeat,
+} from "react-native-feather";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { db } from "../../api/firebase/config";
 import { sendMessage } from "../../store/slices/chatSlice";
@@ -43,10 +49,10 @@ import {
   cancelTaskReminder,
 } from "../../services/NotificationService";
 import TaskComments from "../../components/TaskComments";
-// First, import the DateTimePickerModal component
 import DateTimePickerModal from "@/components/DateTimePickerModal";
 import ContactSelector from "../../components/ContactSelector";
 import type { Contact } from "../../services/ContactsService";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
 
 const TaskDetailScreen = ({ navigation, route }: any) => {
   const { taskId } = route.params;
@@ -67,7 +73,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejections, setRejections] = useState<any[]>([]);
   const { currentGroup } = useAppSelector((state) => state.groups);
-  // Replace the existing showDatePicker state with dateTimePickerVisible
   const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
   const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
   const [assignedUser, setAssignedUser] = useState<{
@@ -90,6 +95,14 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       }
       setIsDueDatePassed(dueDate < new Date());
     }
+
+    // Set assigned user from task data
+    if (currentTask?.assignedTo) {
+      setAssignedUser({
+        id: currentTask.assignedTo,
+        displayName: currentTask.assignedToName,
+      });
+    }
   }, [currentTask]);
 
   useEffect(() => {
@@ -105,7 +118,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     }
   }, [dispatch, taskId, currentTask?.status]);
 
-  // Replace the handleDateChange function with a new one that works with the DateTimePickerModal
   const handleDateTimeChange = (date: Date | null) => {
     setDateTimePickerVisible(false);
     if (date && isValid(date)) {
@@ -350,7 +362,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     );
   };
 
-  // Add this function to handle user selection
   const handleUserSelect = () => {
     navigation.navigate("ContactsForTaskAssignment", { taskId });
   };
@@ -381,7 +392,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     }
   };
 
-  // Add this function to handle rejection
   const handleRejectTask = () => {
     if (!rejectionReason.trim()) {
       Alert.alert("Error", "Please provide a reason for rejection");
@@ -391,7 +401,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     handleUpdateGroupTaskStatus("reviewRejected", rejectionReason.trim());
   };
 
-  // Function to handle contact selection
   const handleContactSelect = (contact: Contact) => {
     setContactSelectorVisible(false);
     if (contact) {
@@ -400,11 +409,60 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
         updateTask({
           taskId,
           updates: {
-            assignedToId: contact.id,
-            assignedToName: contact.displayName,
+            assignedTo: contact.id,
+            assignedToName: contact.name,
           },
         })
       );
+    }
+  };
+
+  // Function to get recurrence description
+  const getRecurrenceDescription = (): string => {
+    if (!currentTask?.recurrencePattern || !currentTask?.dueDate)
+      return "Does not repeat";
+
+    const options = currentTask.recurrencePattern;
+    const date = new Date(currentTask.dueDate);
+
+    // For weekly recurrence with specific days
+    if (
+      options.type === "weekly" &&
+      options.weekDays &&
+      options.weekDays.length > 0
+    ) {
+      const dayNames = options.weekDays
+        .map(
+          (dayIndex: any) =>
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayIndex]
+        )
+        .join(", ");
+
+      return options.frequency === 1
+        ? `Weekly on ${dayNames}`
+        : `Every ${options.frequency} weeks on ${dayNames}`;
+    }
+
+    // For other recurrence types
+    switch (options.type) {
+      case "daily":
+        return options.frequency === 1
+          ? "Daily"
+          : `Every ${options.frequency} days`;
+      case "weekly":
+        return options.frequency === 1
+          ? `Weekly on ${format(date, "EEEE")}`
+          : `Every ${options.frequency} weeks on ${format(date, "EEEE")}`;
+      case "monthly":
+        return options.frequency === 1
+          ? `Monthly on the ${format(date, "do")}`
+          : `Every ${options.frequency} months on the ${format(date, "do")}`;
+      case "yearly":
+        return options.frequency === 1
+          ? `Annually on ${format(date, "MMMM d")}`
+          : `Every ${options.frequency} years on ${format(date, "MMMM d")}`;
+      default:
+        return "Custom";
     }
   };
 
@@ -413,17 +471,22 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
-        <Appbar.Content title="Task Details" color="white" />
+      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
+        <Appbar.BackAction
+          color={theme.colors.onPrimary}
+          onPress={() => navigation.goBack()}
+        />
+        <Appbar.Content title="Task Details" color={theme.colors.onPrimary} />
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
           anchor={
             <Appbar.Action
-              icon={(props) => <MoreVertical {...props} color="white" />}
+              icon={(props) => (
+                <MoreVertical {...props} color={theme.colors.onPrimary} />
+              )}
               onPress={() => setMenuVisible(true)}
-              color="white"
+              color={theme.colors.onPrimary}
             />
           }
         >
@@ -454,8 +517,8 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               ]}
               textStyle={{ color: theme.colors.onPrimary }}
             >
-              {currentTask?.status?.charAt(0).toUpperCase() +
-                currentTask?.status?.slice(1)}
+              {(currentTask?.status || "todo").charAt(0).toUpperCase() +
+                (currentTask?.status || "todo").slice(1)}
             </Chip>
 
             <Chip
@@ -471,8 +534,8 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 color: getPriorityColor(currentTask?.priority || "medium"),
               }}
             >
-              {currentTask?.priority?.charAt(0).toUpperCase() +
-                currentTask?.priority?.slice(1)}{" "}
+              {currentTask?.priority?.charAt(0).toUpperCase() ??
+                "" + currentTask?.priority?.slice(1)}{" "}
               Priority
             </Chip>
 
@@ -517,14 +580,22 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               { borderBottomColor: theme.colors.border },
             ]}
           >
-            <Text
-              style={[
-                styles.detailLabel,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Created
-            </Text>
+            <View style={styles.detailLabelContainer}>
+              <Calendar
+                width={20}
+                height={20}
+                stroke={theme.colors.textSecondary}
+                style={styles.detailIcon}
+              />
+              <Text
+                style={[
+                  styles.detailLabel,
+                  { color: theme.colors.textSecondary },
+                ]}
+              >
+                Created
+              </Text>
+            </View>
             <Text style={[styles.detailValue, { color: theme.colors.text }]}>
               {formatDate(currentTask?.createdAt, "MMM d, yyyy 'at' h:mm a")}
             </Text>
@@ -537,32 +608,67 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 { borderBottomColor: theme.colors.border },
               ]}
             >
-              <Text
-                style={[
-                  styles.detailLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Due Date & Time
-              </Text>
-              <TouchableOpacity onPress={() => setDateTimePickerVisible(true)}>
+              <View style={styles.detailLabelContainer}>
+                <Clock
+                  width={20}
+                  height={20}
+                  stroke={theme.colors.textSecondary}
+                  style={styles.detailIcon}
+                />
                 <Text
                   style={[
-                    styles.detailValue,
-                    {
-                      color:
-                        isDueDatePassed && currentTask.status !== "completed"
-                          ? theme.colors.error
-                          : theme.colors.primary,
-                    },
+                    styles.detailLabel,
+                    { color: theme.colors.textSecondary },
                   ]}
                 >
-                  {formatDate(currentTask?.dueDate, "MMM d, yyyy 'at' h:mm a")}
-                  {isDueDatePassed &&
-                    currentTask.status !== "completed" &&
-                    " (Overdue)"}
+                  Due Date & Time
                 </Text>
-              </TouchableOpacity>
+              </View>
+              <Text
+                style={[
+                  styles.detailValue,
+                  {
+                    color:
+                      isDueDatePassed && currentTask.status !== "completed"
+                        ? theme.colors.error
+                        : theme.colors.text,
+                  },
+                ]}
+              >
+                {formatDate(currentTask?.dueDate, "MMM d, yyyy 'at' h:mm a")}
+                {isDueDatePassed &&
+                  currentTask.status !== "completed" &&
+                  " (Overdue)"}
+              </Text>
+            </View>
+          )}
+
+          {currentTask?.isRecurring && (
+            <View
+              style={[
+                styles.detailRow,
+                { borderBottomColor: theme.colors.border },
+              ]}
+            >
+              <View style={styles.detailLabelContainer}>
+                <Repeat
+                  width={20}
+                  height={20}
+                  stroke={theme.colors.textSecondary}
+                  style={styles.detailIcon}
+                />
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Recurrence
+                </Text>
+              </View>
+              <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+                {getRecurrenceDescription()}
+              </Text>
             </View>
           )}
 
@@ -572,21 +678,25 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               { borderBottomColor: theme.colors.border },
             ]}
           >
-            <Text
-              style={[
-                styles.detailLabel,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
-              Assigned To
-            </Text>
-            <TouchableOpacity onPress={() => setContactSelectorVisible(true)}>
+            <View style={styles.detailLabelContainer}>
+              <User
+                width={20}
+                height={20}
+                stroke={theme.colors.textSecondary}
+                style={styles.detailIcon}
+              />
               <Text
-                style={[styles.detailValue, { color: theme.colors.primary }]}
+                style={[
+                  styles.detailLabel,
+                  { color: theme.colors.textSecondary },
+                ]}
               >
-                {currentTask?.assignedToName || "Assign to someone"}
+                Assigned To
               </Text>
-            </TouchableOpacity>
+            </View>
+            <Text style={[styles.detailValue, { color: theme.colors.text }]}>
+              {currentTask?.assignedToName || "Not assigned"}
+            </Text>
           </View>
 
           {currentTask?.completedAt && (
@@ -596,14 +706,22 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 { borderBottomColor: theme.colors.border },
               ]}
             >
-              <Text
-                style={[
-                  styles.detailLabel,
-                  { color: theme.colors.textSecondary },
-                ]}
-              >
-                Completed
-              </Text>
+              <View style={styles.detailLabelContainer}>
+                <Icon
+                  name="check-circle"
+                  size={20}
+                  color={theme.colors.textSecondary}
+                  style={styles.detailIcon}
+                />
+                <Text
+                  style={[
+                    styles.detailLabel,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Completed
+                </Text>
+              </View>
               <Text style={[styles.detailValue, { color: theme.colors.text }]}>
                 {formatDate(
                   currentTask?.completedAt,
@@ -613,73 +731,40 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
             </View>
           )}
 
-          {currentTask?.isRecurring && (
+          {/* Display reminders */}
+          {currentTask?.reminders && currentTask.reminders.length > 0 && (
             <View
-              style={[styles.section, { backgroundColor: theme.colors.card }]}
+              style={[
+                styles.detailRow,
+                { borderBottomColor: theme.colors.border },
+              ]}
             >
-              <Text
-                style={[styles.sectionTitle, { color: theme.colors.primary }]}
-              >
-                Recurrence
-              </Text>
-
-              <View
-                style={[
-                  styles.detailRow,
-                  { borderBottomColor: theme.colors.border },
-                ]}
-              >
+              <View style={styles.detailLabelContainer}>
+                <Bell
+                  width={20}
+                  height={20}
+                  stroke={theme.colors.textSecondary}
+                  style={styles.detailIcon}
+                />
                 <Text
                   style={[
                     styles.detailLabel,
                     { color: theme.colors.textSecondary },
                   ]}
                 >
-                  Pattern
-                </Text>
-                <Text
-                  style={[styles.detailValue, { color: theme.colors.text }]}
-                >
-                  {currentTask?.recurrencePatternId ? "Custom" : "Not set"}
+                  Reminders
                 </Text>
               </View>
-
-              {currentTask?.recurrenceIndex !== undefined && (
-                <View
-                  style={[
-                    styles.detailRow,
-                    { borderBottomColor: theme.colors.border },
-                  ]}
-                >
+              <View style={styles.remindersList}>
+                {currentTask.reminders.map((reminder, index) => (
                   <Text
-                    style={[
-                      styles.detailLabel,
-                      { color: theme.colors.textSecondary },
-                    ]}
+                    key={index}
+                    style={[styles.reminderItem, { color: theme.colors.text }]}
                   >
-                    Occurrence
+                    {reminder.label || reminder.value}
                   </Text>
-                  <Text
-                    style={[styles.detailValue, { color: theme.colors.text }]}
-                  >
-                    #{currentTask?.recurrenceIndex}
-                  </Text>
-                </View>
-              )}
-
-              <Button
-                mode="text"
-                onPress={() => {
-                  Alert.alert(
-                    "View All Occurrences",
-                    "This would show all occurrences of this recurring task."
-                  );
-                }}
-                style={styles.viewAllButton}
-                textColor={theme.colors.primary}
-              >
-                View all occurrences
-              </Button>
+                ))}
+              </View>
             </View>
           )}
 
@@ -692,14 +777,22 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                   { borderBottomColor: theme.colors.border },
                 ]}
               >
-                <Text
-                  style={[
-                    styles.detailLabel,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  Set Reminder
-                </Text>
+                <View style={styles.detailLabelContainer}>
+                  <Bell
+                    width={20}
+                    height={20}
+                    stroke={theme.colors.textSecondary}
+                    style={styles.detailIcon}
+                  />
+                  <Text
+                    style={[
+                      styles.detailLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Set Reminder
+                  </Text>
+                </View>
                 <Switch
                   value={reminderEnabled}
                   onValueChange={handleToggleReminder}
@@ -953,6 +1046,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+
       {/* Rejection Dialog */}
       <Portal>
         <Dialog
@@ -979,7 +1073,8 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
-      {/* Find the section where the date picker is rendered and replace it with the DateTimePickerModal */}
+
+      {/* DateTimePickerModal */}
       <DateTimePickerModal
         visible={dateTimePickerVisible}
         onDismiss={() => setDateTimePickerVisible(false)}
@@ -988,12 +1083,16 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
           currentTask?.dueDate ? new Date(currentTask.dueDate) : new Date()
         }
       />
-      <ContactSelector
-        visible={contactSelectorVisible}
-        onDismiss={() => setContactSelectorVisible(false)}
-        onSelectContact={handleContactSelect}
-        title="Assign Task To"
-      />
+
+      {/* ContactSelector */}
+      {contactSelectorVisible && (
+        <ContactSelector
+          onSelectContact={handleContactSelect}
+          onCancel={() => setContactSelectorVisible(false)}
+          title="Assign Task To"
+          visible={contactSelectorVisible}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 };
@@ -1062,6 +1161,13 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: 1,
   },
+  detailLabelContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  detailIcon: {
+    marginRight: 8,
+  },
   reminderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -1075,6 +1181,8 @@ const styles = StyleSheet.create({
   },
   detailValue: {
     fontSize: 16,
+    maxWidth: "60%",
+    textAlign: "right",
   },
   actionsSection: {
     padding: 16,
@@ -1147,6 +1255,13 @@ const styles = StyleSheet.create({
   },
   assignmentIcon: {
     marginRight: 12,
+  },
+  remindersList: {
+    flexDirection: "column",
+    alignItems: "flex-end",
+  },
+  reminderItem: {
+    marginBottom: 4,
   },
 });
 

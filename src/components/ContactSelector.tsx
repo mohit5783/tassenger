@@ -24,12 +24,14 @@ interface ContactSelectorProps {
   onSelectContact: (contact: Contact) => void;
   onCancel: () => void;
   title?: string;
+  visible?: boolean; // Add optional visible prop
 }
 
 const ContactSelector: React.FC<ContactSelectorProps> = ({
   onSelectContact,
   onCancel,
   title = "Select Contact",
+  visible = true, // Add default value
 }) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
@@ -107,6 +109,11 @@ const ContactSelector: React.FC<ContactSelectorProps> = ({
       </View>
     </TouchableOpacity>
   );
+
+  // If not visible, return null
+  if (!visible) {
+    return null;
+  }
 
   if (!hasPermission) {
     return (

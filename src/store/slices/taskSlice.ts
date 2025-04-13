@@ -29,6 +29,13 @@ export type TaskStatus =
 export type TaskPriority = "low" | "medium" | "high";
 // export type TaskCategory = "work" | "personal" | "shopping" | "health" | "finance" | "other"
 
+// Define the reminder interface
+export interface TaskReminder {
+  id: string;
+  value: string;
+  label?: string; // Add optional label property
+}
+
 // Update the Task interface to include group-related fields
 export interface Task {
   id: string;
@@ -51,12 +58,14 @@ export interface Task {
   reminderSet?: boolean;
   reminderIdentifier?: string | null;
   reminderIdentifiers?: string[]; // Add this line for multiple reminders
+  reminders?: TaskReminder[]; // Add this line for structured reminders
   parentTaskId?: string; // For subtasks
   subtasks?: string[]; // IDs of subtasks
   // Recurring task properties
   isRecurring?: boolean;
   recurrencePatternId?: string;
   recurrenceIndex?: number;
+  recurrencePattern?: any; // For storing recurrence options
 }
 
 // Add more functionality to the initial state
