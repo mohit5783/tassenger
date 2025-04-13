@@ -289,6 +289,13 @@ const TasksListScreen = ({ navigation }: any) => {
     }
   };
 
+  const formatTaskTime = (timestamp: number | undefined): string => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    if (!isValid(date)) return "";
+    return format(date, "h:mm a");
+  };
+
   const handleTaskPress = (taskId: string) => {
     navigation.navigate("TaskDetail", { taskId });
   };
@@ -399,7 +406,7 @@ const TasksListScreen = ({ navigation }: any) => {
       onPress={() => handleTaskPress(item.id)}
     >
       <View style={styles.taskContainer}>
-        <Avatar.Text
+        {/* <Avatar.Text
           size={50}
           label={getCategoryIcon(item.category || "other")}
           style={{
@@ -408,7 +415,7 @@ const TasksListScreen = ({ navigation }: any) => {
                 ? "#4CAF50" // Green for completed tasks
                 : getStatusColor(item.status),
           }}
-        />
+        /> */}
         <View style={styles.taskContent}>
           <View style={styles.taskHeader}>
             <Text style={[styles.taskTitle, { color: theme.colors.text }]}>
@@ -418,7 +425,8 @@ const TasksListScreen = ({ navigation }: any) => {
               <Text
                 style={[styles.taskTime, { color: theme.colors.textSecondary }]}
               >
-                {formatDate(item.dueDate, "MMM d")}
+                {formatDate(item.dueDate, "MMM d")}{" "}
+                {item.dueDate && formatTaskTime(item.dueDate)}
               </Text>
             )}
           </View>

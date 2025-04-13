@@ -3,15 +3,14 @@
 import { useState, useEffect } from "react";
 import { View, StyleSheet, ScrollView, TouchableOpacity } from "react-native";
 import {
-  Modal,
-  Portal,
   Text,
   TextInput,
   Button,
   SegmentedButtons,
   Appbar,
-  Chip,
   Menu,
+  Modal,
+  Portal,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppDispatch, useAppSelector } from "../../store/hooks";
@@ -19,20 +18,31 @@ import {
   createTask,
   type TaskStatus,
   type TaskPriority,
-  type TaskCategory,
   updateTask,
 } from "../../store/slices/taskSlice";
 import { createRecurringTask } from "../../store/slices/recurrenceSlice";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { isValid } from "date-fns";
-import NotificationSettings from "../../components/NotificationSettings";
 import CustomReminderModal from "../../components/CustomReminderModal";
 import ContactSelector from "../../components/ContactSelector";
-import { scheduleCustomTaskReminder } from "../../services/NotificationService";
-import RecurrenceSelector from "../../components/RecurrenceSelector";
-import type { RecurrenceOptions } from "../../types/recurrence";
 import type { Contact } from "../../services/ContactsService";
 import { User } from "react-native-feather";
+import DateTimePickerModal from "../../components/DateTimePickerModal";
+import { format } from "date-fns";
+import type { RecurrenceOptions } from "../../types/recurrence";
+import NotificationPickerModal from "@/components/NotificationPickerModal";
+import { scheduleCustomTaskReminder } from "@/services/NotificationService";
+// Import the new CustomRecurrenceModal component
+import CustomRecurrenceModal from "../../components/CustomRecurrenceModal";
+import Icon from "react-native-vector-icons/MaterialCommunityIcons";
+import ReminderItem from "@/components/ReminderItem";
+
+interface ReminderTime {
+  id: string;
+  days?: number;
+  hours?: number;
+  minutes?: number;
+  label: string;
+}
 
 const CreateTaskScreen = ({ navigation, route }: any) => {
   const { theme, taskReminderDefault } = useTheme();
@@ -45,20 +55,22 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
   const [description, setDescription] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
   const [priority, setPriority] = useState<TaskPriority>("medium");
-  const [category, setCategory] = useState<TaskCategory>("other");
-  const [tags, setTags] = useState<string[]>([]);
-  const [newTag, setNewTag] = useState("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [categoryMenuVisible, setCategoryMenuVisible] = useState(false);
+  const [showDateTimePicker, setShowDateTimePicker] = useState(false);
   const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
   const [assignedUser, setAssignedUser] = useState<{
     id: string;
     displayName?: string;
   } | null>(null);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
-  const [selectedReminders, setSelectedReminders] = useState<string[]>([]);
+  const [recurrenceOptions, setRecurrenceOptions] =
+    useState<RecurrenceOptions | null>(null);
+  const [recurrenceModalVisible, setRecurrenceModalVisible] = useState(false);
+  const [notificationPickerVisible, setNotificationPickerVisible] =
+    useState(false);
+  const [selectedReminders, setSelectedReminders] = useState<
+    { id: string; value: string }[]
+  >([{ id: "default", value: "10 minutes before" }]);
   const [customReminderModalVisible, setCustomReminderModalVisible] =
     useState(false);
   const [customReminders, setCustomReminders] = useState<
@@ -71,18 +83,28 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     }>
   >([]);
 
-  // Add state for recurrence
-  const [recurrenceOptions, setRecurrenceOptions] =
-    useState<RecurrenceOptions | null>(null);
-
   const defaultReminderTimes = [
     { id: "at_time", days: 0, hours: 0, minutes: 0, label: "At time of event" },
+    {
+      id: "5_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 5,
+      label: "5 minutes before",
+    },
     {
       id: "10_min_before",
       days: 0,
       hours: 0,
       minutes: 10,
       label: "10 minutes before",
+    },
+    {
+      id: "15_min_before",
+      days: 0,
+      hours: 0,
+      minutes: 15,
+      label: "15 minutes before",
     },
     {
       id: "30_min_before",
@@ -114,14 +136,14 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     },
   ];
 
+  const [menuVisible, setMenuVisible] = useState(false);
+
   useEffect(() => {
     const template = route.params?.template;
     if (template) {
       setTitle(template.title);
       setDescription(template.description || "");
       setPriority(template.priority);
-      setCategory(template.category || "other");
-      setTags(template.tags || []);
     }
   }, [route.params]);
 
@@ -129,42 +151,42 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     // Apply default reminder setting from theme
     if (dueDate && taskReminderDefault) {
       // Start with an empty selection
-      const initialReminders: string[] = [];
+      const initialReminders: { id: string; value: string }[] = [];
 
       // Add the default reminder based on user preference
       switch (taskReminderDefault) {
         case "attime":
-          initialReminders.push("at_time");
+          initialReminders.push({ id: "at_time", value: "At time of event" });
           break;
         case "10min":
-          initialReminders.push("10_min_before");
+          initialReminders.push({
+            id: "10_min_before",
+            value: "10 minutes before",
+          });
           break;
         case "1hour":
-          initialReminders.push("1_hour_before");
+          initialReminders.push({
+            id: "1_hour_before",
+            value: "1 hour before",
+          });
           break;
         case "1day":
-          initialReminders.push("1_day_before");
+          initialReminders.push({ id: "1_day_before", value: "1 day before" });
           break;
       }
 
       // Set the selected reminders
       if (initialReminders.length > 0) {
         setSelectedReminders(initialReminders);
-        setNotificationsEnabled(true);
       }
     }
   }, [dueDate, taskReminderDefault]);
 
-  // Replace the handleAddCustomReminder function with this version
-  // that doesn't use UUID at all and uses a completely different approach for IDs
-
-  // Replace the handleAddCustomReminder function with this version
   const handleAddCustomReminder = (
     days: number,
     hours: number,
     minutes: number
   ) => {
-    // Create a simple ID based on the time values instead of using UUID
     const simpleId = `reminder_${days}_${hours}_${minutes}_${Date.now()}`;
 
     const newReminder = {
@@ -180,7 +202,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     };
 
     setCustomReminders([...customReminders, newReminder]);
-    setSelectedReminders([...selectedReminders, simpleId]);
+    //setSelectedReminders([...selectedReminders, simpleId])
     setCustomReminderModalVisible(false);
   };
 
@@ -194,8 +216,6 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
         description,
         status,
         priority,
-        category,
-        tags,
         createdBy: user.id,
         dueDate: dueDate && isValid(dueDate) ? dueDate.getTime() : undefined,
       };
@@ -224,7 +244,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
         // Otherwise create a regular task
         const result = await dispatch(createTask(taskData)).unwrap();
 
-        if (notificationsEnabled && dueDate && isValid(dueDate)) {
+        if (selectedReminders.length > 0 && dueDate && isValid(dueDate)) {
           const reminderIdentifiers: string[] = [];
 
           const allReminderTimes = [
@@ -234,7 +254,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
 
           for (const reminderId of selectedReminders) {
             const reminderTime = allReminderTimes.find(
-              (r) => r.id === reminderId
+              (r) => r.id === reminderId.id
             );
             if (reminderTime) {
               const identifier = await scheduleCustomTaskReminder(result, {
@@ -269,39 +289,9 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
     }
   };
 
-  const handleDateChange = (event: any, selectedDate?: Date) => {
-    setShowDatePicker(false);
-    if (selectedDate && isValid(selectedDate)) {
-      setDueDate(selectedDate);
-    }
-  };
-
-  const handleAddTag = () => {
-    if (newTag.trim() && !tags.includes(newTag.trim())) {
-      setTags([...tags, newTag.trim()]);
-      setNewTag("");
-    }
-  };
-
-  const handleRemoveTag = (tagToRemove: string) => {
-    setTags(tags.filter((tag) => tag !== tagToRemove));
-  };
-
-  const getCategoryColor = (cat: TaskCategory): string => {
-    switch (cat) {
-      case "work":
-        return "#4285F4"; // Blue
-      case "personal":
-        return "#EA4335"; // Red
-      case "shopping":
-        return "#FBBC05"; // Yellow
-      case "health":
-        return "#34A853"; // Green
-      case "finance":
-        return "#8E24AA"; // Purple
-      default:
-        return "#757575"; // Gray
-    }
+  const handleDateTimeConfirm = (date: Date) => {
+    setDueDate(date);
+    setShowDateTimePicker(false);
   };
 
   const handleContactSelect = (contact: Contact) => {
@@ -320,30 +310,74 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
 
   // Handle recurrence options change
   const handleRecurrenceChange = (options: RecurrenceOptions | null) => {
-    // Validate numeric values before setting state
-    if (options) {
-      // Ensure frequency is a valid number
-      if (isNaN(options.frequency)) {
-        options.frequency = 1;
-      }
-
-      // Ensure endCount is a valid number if present
-      if (
-        options.endType === "count" &&
-        options.endCount !== undefined &&
-        isNaN(options.endCount)
-      ) {
-        options.endCount = 1;
-      }
-    }
-
     setRecurrenceOptions(options);
+    setRecurrenceModalVisible(false);
   };
 
-  // Inside the CreateTaskScreen component
-  const { isLoading: contactsLoading } = useAppSelector(
-    (state) => state.contacts
-  );
+  const getRecurrenceDescription = (
+    options: RecurrenceOptions,
+    date: Date
+  ): string => {
+    if (!options) return "Does not repeat";
+
+    // For weekly recurrence with specific days
+    if (
+      options.type === "weekly" &&
+      options.weekDays &&
+      options.weekDays.length > 0
+    ) {
+      const dayNames = options.weekDays
+        .map(
+          (dayIndex) =>
+            ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][dayIndex]
+        )
+        .join(", ");
+
+      return options.frequency === 1
+        ? `Weekly on ${dayNames}`
+        : `Every ${options.frequency} weeks on ${dayNames}`;
+    }
+
+    // For other recurrence types
+    switch (options.type) {
+      case "daily":
+        return options.frequency === 1
+          ? "Daily"
+          : `Every ${options.frequency} days`;
+      case "weekly":
+        return options.frequency === 1
+          ? `Weekly on ${format(date, "EEEE")}`
+          : `Every ${options.frequency} weeks on ${format(date, "EEEE")}`;
+      case "monthly":
+        return options.frequency === 1
+          ? `Monthly on the ${format(date, "do")}`
+          : `Every ${options.frequency} months on the ${format(date, "do")}`;
+      case "yearly":
+        return options.frequency === 1
+          ? `Annually on ${format(date, "MMMM d")}`
+          : `Every ${options.frequency} years on ${format(date, "MMMM d")}`;
+      default:
+        return "Custom";
+    }
+  };
+
+  const handleAddReminder = () => {
+    const newId = `reminder_${Date.now()}`;
+    setSelectedReminders((prev) => [
+      ...prev,
+      { id: newId, value: "10 minutes before" },
+    ]);
+  };
+
+  const handleSelectReminder = (id: string, value: string) => {
+    setSelectedReminders((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, value } : r))
+    );
+  };
+
+  const handleRemoveReminder = (id: string) => {
+    setSelectedReminders((prev) => prev.filter((r) => r.id !== id));
+  };
 
   return (
     <View
@@ -375,119 +409,6 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
             numberOfLines={4}
             theme={{ colors: { text: theme.colors.text } }}
           />
-
-          <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            Category
-          </Text>
-          <Menu
-            visible={categoryMenuVisible}
-            onDismiss={() => setCategoryMenuVisible(false)}
-            anchor={
-              <Button
-                mode="outlined"
-                onPress={() => setCategoryMenuVisible(true)}
-                style={[
-                  styles.categoryButton,
-                  { borderColor: getCategoryColor(category) },
-                ]}
-                labelStyle={{ color: getCategoryColor(category) }}
-              >
-                {category.charAt(0).toUpperCase() + category.slice(1)}
-              </Button>
-            }
-          >
-            <Menu.Item
-              title="Work"
-              onPress={() => {
-                setCategory("work");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="briefcase"
-            />
-            <Menu.Item
-              title="Personal"
-              onPress={() => {
-                setCategory("personal");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="account"
-            />
-            <Menu.Item
-              title="Shopping"
-              onPress={() => {
-                setCategory("shopping");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="cart"
-            />
-            <Menu.Item
-              title="Health"
-              onPress={() => {
-                setCategory("health");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="heart"
-            />
-            <Menu.Item
-              title="Finance"
-              onPress={() => {
-                setCategory("finance");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="cash"
-            />
-            <Menu.Item
-              title="Other"
-              onPress={() => {
-                setCategory("other");
-                setCategoryMenuVisible(false);
-              }}
-              leadingIcon="dots-horizontal"
-            />
-          </Menu>
-
-          <Text
-            style={[
-              styles.sectionTitle,
-              { color: theme.colors.primary, marginTop: 16 },
-            ]}
-          >
-            Tags
-          </Text>
-          <View style={styles.tagsContainer}>
-            {tags.map((tag, index) => (
-              <Chip
-                key={index}
-                style={[
-                  styles.tagChip,
-                  { backgroundColor: theme.dark ? "#444444" : "#f0f0f0" },
-                ]}
-                textStyle={{ color: theme.colors.text }}
-                onClose={() => handleRemoveTag(tag)}
-              >
-                {tag}
-              </Chip>
-            ))}
-          </View>
-          <View style={styles.tagInputContainer}>
-            <TextInput
-              style={styles.tagInput}
-              mode="outlined"
-              label="Add Tag"
-              value={newTag}
-              onChangeText={setNewTag}
-              theme={{ colors: { text: theme.colors.text } }}
-            />
-            <Button
-              mode="contained"
-              onPress={handleAddTag}
-              style={styles.addTagButton}
-              disabled={!newTag.trim()}
-              buttonColor={theme.colors.primary}
-            >
-              Add
-            </Button>
-          </View>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
             Status
@@ -551,41 +472,116 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
           </View>
 
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
-            Due Date (Optional)
+            Due Date & Time (Optional)
           </Text>
           <Button
             mode="outlined"
-            onPress={() => setShowDatePicker(true)}
-            style={styles.dateButton}
+            onPress={() => setShowDateTimePicker(true)}
+            style={styles.dateTimeButton}
+            icon="calendar-clock"
             textColor={theme.colors.text}
           >
             {dueDate && isValid(dueDate)
-              ? dueDate.toLocaleDateString()
-              : "Select Due Date"}
+              ? `${dueDate.toLocaleDateString()} at ${dueDate.toLocaleTimeString(
+                  [],
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: true,
+                  }
+                )}`
+              : "Set Due Date & Time"}
           </Button>
 
-          {showDatePicker && (
-            <DateTimePicker
-              value={dueDate || new Date()}
-              mode="date"
-              display="default"
-              onChange={handleDateChange}
-            />
-          )}
-
-          {/* Add RecurrenceSelector component */}
+          {/* Recurrence Section */}
           {dueDate && (
-            <View
-              style={[
-                styles.recurrenceSection,
-                { backgroundColor: theme.dark ? "#333333" : "#f9f9f9" },
-              ]}
-            >
-              <RecurrenceSelector
-                initialDueDate={dueDate}
-                onRecurrenceChange={handleRecurrenceChange}
-                initialOptions={recurrenceOptions}
-              />
+            <View style={styles.recurrenceSection}>
+              <Text
+                style={[styles.sectionTitle, { color: theme.colors.primary }]}
+              >
+                Repeat
+              </Text>
+              <Menu
+                visible={menuVisible}
+                onDismiss={() => setMenuVisible(false)}
+                anchor={
+                  <Button
+                    mode="outlined"
+                    onPress={() => setMenuVisible(true)}
+                    style={styles.recurrenceDropdown}
+                    icon={() => (
+                      <Icon name="repeat" size={20} color={theme.colors.text} />
+                    )}
+                    textColor={theme.colors.text}
+                    contentStyle={styles.recurrenceButtonContent}
+                  >
+                    {recurrenceOptions
+                      ? getRecurrenceDescription(recurrenceOptions, dueDate)
+                      : "Does not repeat"}
+                    <Text style={{ color: theme.colors.text }}> ▼</Text>
+                  </Button>
+                }
+              >
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions(null);
+                    setMenuVisible(false);
+                  }}
+                  title="Does not repeat"
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "daily",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title="Daily"
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "weekly",
+                      frequency: 1,
+                      endType: "never",
+                      weekDays: [dueDate.getDay()],
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Weekly on ${format(dueDate, "EEEE")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "monthly",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Monthly on the ${format(dueDate, "do")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceOptions({
+                      type: "yearly",
+                      frequency: 1,
+                      endType: "never",
+                    });
+                    setMenuVisible(false);
+                  }}
+                  title={`Annually on ${format(dueDate, "MMMM d")}`}
+                />
+                <Menu.Item
+                  onPress={() => {
+                    setRecurrenceModalVisible(true);
+                    setMenuVisible(false);
+                  }}
+                  title="Custom..."
+                />
+              </Menu>
             </View>
           )}
 
@@ -600,7 +596,7 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
                 borderRadius: 8,
               },
             ]}
-            onPress={handleOpenContactSelector}
+            onPress={() => setContactSelectorVisible(true)}
             activeOpacity={0.7}
           >
             <View style={styles.assignmentButtonContent}>
@@ -622,24 +618,31 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
           </TouchableOpacity>
 
           {/* Only show notifications if not a recurring task */}
-          {!recurrenceOptions && dueDate && (
-            <NotificationSettings
-              enabled={notificationsEnabled}
-              onToggle={setNotificationsEnabled}
-              reminderTimes={[...defaultReminderTimes, ...customReminders]}
-              selectedReminders={selectedReminders}
-              onSelectReminder={(reminderId, selected) => {
-                if (selected) {
-                  setSelectedReminders([...selectedReminders, reminderId]);
-                } else {
-                  setSelectedReminders(
-                    selectedReminders.filter((id) => id !== reminderId)
-                  );
-                }
-              }}
-              onAddCustomReminder={() => setCustomReminderModalVisible(true)}
-            />
-          )}
+          <View>
+            <Text
+              style={[styles.sectionTitle, { color: theme.colors.primary }]}
+            >
+              Reminders
+            </Text>
+            {selectedReminders.map((reminder) => {
+              return (
+                <ReminderItem
+                  key={reminder.id}
+                  id={reminder.id}
+                  value={reminder.value}
+                  onRemove={handleRemoveReminder}
+                  onChange={handleSelectReminder}
+                />
+              );
+            })}
+            <Button
+              mode="outlined"
+              onPress={handleAddReminder}
+              style={styles.addReminderButton}
+            >
+              Add Reminder
+            </Button>
+          </View>
 
           <Button
             mode="contained"
@@ -656,6 +659,13 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
         </View>
       </ScrollView>
 
+      <DateTimePickerModal
+        visible={showDateTimePicker}
+        onDismiss={() => setShowDateTimePicker(false)}
+        onConfirm={handleDateTimeConfirm}
+        initialDate={dueDate || new Date()}
+      />
+
       <CustomReminderModal
         visible={customReminderModalVisible}
         onDismiss={() => setCustomReminderModalVisible(false)}
@@ -667,25 +677,36 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
         <Portal>
           <Modal
             visible={contactSelectorVisible}
-            onDismiss={() => {
-              // Only allow dismissal if contacts are not loading
-              if (!contactsLoading) {
-                setContactSelectorVisible(false);
-              }
-            }}
-            dismissable={!contactsLoading} // Prevent dismissal while loading
+            onDismiss={() => setContactSelectorVisible(false)}
             contentContainerStyle={styles.modalContainer}
           >
             <ContactSelector
               onSelectContact={handleContactSelect}
-              onCancel={() => {
-                setContactSelectorVisible(false);
-              }}
+              onCancel={() => setContactSelectorVisible(false)}
               title="Assign Task To"
             />
           </Modal>
         </Portal>
       )}
+
+      <NotificationPickerModal
+        visible={notificationPickerVisible}
+        onDismiss={() => setNotificationPickerVisible(false)}
+        onConfirm={(selected) => {
+          //setSelectedReminders(selected);
+          setNotificationPickerVisible(false);
+        }}
+        initialSelected={[]}
+      />
+
+      {/* Use CustomRecurrenceModal directly without nesting in another modal */}
+      <CustomRecurrenceModal
+        visible={recurrenceModalVisible}
+        onDismiss={() => setRecurrenceModalVisible(false)}
+        onConfirm={handleRecurrenceChange}
+        initialDate={dueDate || new Date()}
+        initialOptions={recurrenceOptions}
+      />
     </View>
   );
 };
@@ -693,6 +714,10 @@ const CreateTaskScreen = ({ navigation, route }: any) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   formCard: {
     margin: 8,
@@ -707,31 +732,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     marginBottom: 8,
   },
-  categoryButton: {
-    marginBottom: 16,
-  },
-  tagsContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: 8,
-    gap: 8,
-  },
-  tagChip: {
-    marginRight: 4,
-    marginBottom: 4,
-  },
-  tagInputContainer: {
-    flexDirection: "row",
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  tagInput: {
-    flex: 1,
-    marginRight: 8,
-  },
-  addTagButton: {
-    marginTop: 8,
-  },
   segmentedButtons: {
     marginBottom: 16,
   },
@@ -744,17 +744,46 @@ const styles = StyleSheet.create({
     flex: 1,
     marginHorizontal: 4,
   },
-  dateButton: {
+  dateTimeButton: {
     marginBottom: 24,
+    paddingVertical: 8,
+  },
+  assignButton: {
+    marginBottom: 16,
+  },
+  updateButton: {
+    marginTop: 8,
+    paddingVertical: 8,
+  },
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "white",
+    margin: 0,
+    padding: 0,
+    width: "100%",
+    height: "100%",
+    borderRadius: 0,
+  },
+  recurrenceButton: {
+    width: "80%",
+    alignSelf: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
+  },
+  recurrenceButtonContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    width: "100%",
   },
   recurrenceSection: {
     marginBottom: 24,
-    borderRadius: 8,
-    padding: 8,
   },
-  assignmentButton: {
-    marginBottom: 24,
-    overflow: "hidden",
+  recurrenceDropdown: {
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "space-between",
+    marginVertical: 8,
   },
   assignmentButtonContent: {
     flexDirection: "row",
@@ -769,18 +798,20 @@ const styles = StyleSheet.create({
   assignmentIcon: {
     marginRight: 12,
   },
-  createButton: {
-    marginTop: 8,
+  notificationButton: {
+    marginBottom: 16,
     paddingVertical: 8,
   },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "white",
-    margin: 0,
-    padding: 0,
-    width: "100%",
-    height: "100%",
-    borderRadius: 0,
+  createButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  assignmentButton: {
+    marginBottom: 16,
+  },
+  addReminderButton: {
+    marginTop: 8,
   },
 });
 

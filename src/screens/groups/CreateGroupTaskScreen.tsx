@@ -15,7 +15,6 @@ import { useAppDispatch, useAppSelector } from "../../store/hooks";
 import {
   createGroupTask,
   type TaskPriority,
-  type TaskCategory,
   type TaskStatus,
 } from "../../store/slices/taskSlice";
 import { createRecurringTask } from "../../store/slices/recurrenceSlice";
@@ -24,7 +23,7 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { isValid } from "date-fns";
 import ContactSelector from "../../components/ContactSelector";
 import type { Contact } from "../../services/ContactsService";
-import RecurrenceSelector from "../../components/RecurrenceSelector";
+
 import type { RecurrenceOptions } from "../../types/recurrence";
 
 const CreateGroupTaskScreen = ({ navigation, route }: any) => {
@@ -40,7 +39,6 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
-  const [category, setCategory] = useState<TaskCategory>("other");
   const [tags, setTags] = useState<string[]>([]);
   const [newTag, setNewTag] = useState("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
@@ -83,7 +81,6 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
         title,
         description,
         priority,
-        category,
         tags,
         status: "assigned" as TaskStatus,
         createdBy: user.id,
@@ -123,8 +120,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
             title,
             description,
             priority,
-            category,
-            tags,
+
             status: "assigned", // Add the missing status property
             createdBy: user.id,
             dueDate:
@@ -162,23 +158,6 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
 
   const handleRemoveTag = (tagToRemove: string) => {
     setTags(tags.filter((tag) => tag !== tagToRemove));
-  };
-
-  const getCategoryColor = (cat: TaskCategory): string => {
-    switch (cat) {
-      case "work":
-        return "#4285F4"; // Blue
-      case "personal":
-        return "#EA4335"; // Red
-      case "shopping":
-        return "#FBBC05"; // Yellow
-      case "health":
-        return "#34A853"; // Green
-      case "finance":
-        return "#8E24AA"; // Purple
-      default:
-        return "#757575"; // Gray
-    }
   };
 
   const handleContactSelect = (contact: Contact) => {
@@ -289,7 +268,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
             Category
           </Text>
-          <Menu
+          {/* <Menu
             visible={categoryMenuVisible}
             onDismiss={() => setCategoryMenuVisible(false)}
             anchor={
@@ -355,7 +334,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
               }}
               leadingIcon="dots-horizontal"
             />
-          </Menu>
+          </Menu> */}
 
           <Text
             style={[
@@ -484,7 +463,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
             />
           )}
 
-          {dueDate && (
+          {/* {dueDate && (
             <View
               style={[
                 styles.recurrenceSection,
@@ -497,7 +476,7 @@ const CreateGroupTaskScreen = ({ navigation, route }: any) => {
                 initialOptions={recurrenceOptions}
               />
             </View>
-          )}
+          )} */}
 
           <Button
             mode="contained"

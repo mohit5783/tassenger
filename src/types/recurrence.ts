@@ -28,6 +28,7 @@ export interface RecurrenceOptions {
   endType: EndType;
   endDate?: Date;
   endCount?: number;
+  weekDays?: number[]; // Array of days (0-6) for weekly recurrence
 }
 
 // Default values for recurrence options based on type

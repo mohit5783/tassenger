@@ -29,23 +29,6 @@ const TaskCard = ({ task, onPress }: TaskCardProps) => {
     }
   };
 
-  const getCategoryColor = (category: string): string => {
-    switch (category) {
-      case "work":
-        return "#4285F4"; // Blue
-      case "personal":
-        return "#EA4335"; // Red
-      case "shopping":
-        return "#FBBC05"; // Yellow
-      case "health":
-        return "#34A853"; // Green
-      case "finance":
-        return "#8E24AA"; // Purple
-      default:
-        return "#757575"; // Gray
-    }
-  };
-
   return (
     <TouchableOpacity onPress={onPress} disabled={!onPress}>
       <Card
@@ -91,18 +74,6 @@ const TaskCard = ({ task, onPress }: TaskCardProps) => {
             >
               {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
             </Chip>
-
-            {task.category && (
-              <Chip
-                style={[
-                  styles.categoryChip,
-                  { borderColor: getCategoryColor(task.category) },
-                ]}
-                textStyle={{ color: getCategoryColor(task.category) }}
-              >
-                {task.category.charAt(0).toUpperCase() + task.category.slice(1)}
-              </Chip>
-            )}
           </View>
         </Card.Content>
       </Card>
@@ -134,11 +105,6 @@ const styles = StyleSheet.create({
     height: 28,
   },
   priorityChip: {
-    height: 28,
-    backgroundColor: "transparent",
-    borderWidth: 1,
-  },
-  categoryChip: {
     height: 28,
     backgroundColor: "transparent",
     borderWidth: 1,

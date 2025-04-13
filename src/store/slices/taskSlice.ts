@@ -27,13 +27,7 @@ export type TaskStatus =
   | "completed"
   | TaskGroupStatus;
 export type TaskPriority = "low" | "medium" | "high";
-export type TaskCategory =
-  | "work"
-  | "personal"
-  | "shopping"
-  | "health"
-  | "finance"
-  | "other";
+// export type TaskCategory = "work" | "personal" | "shopping" | "health" | "finance" | "other"
 
 // Update the Task interface to include group-related fields
 export interface Task {
@@ -42,8 +36,8 @@ export interface Task {
   description?: string;
   status: TaskStatus;
   priority: TaskPriority;
-  category: TaskCategory;
-  tags?: string[];
+  // category: TaskCategory
+  // tags?: string[]
   createdBy: string;
   assignedTo?: string;
   assignedToName?: string;
@@ -77,8 +71,8 @@ interface TaskState {
   activeFilters: {
     status?: TaskStatus[];
     priority?: TaskPriority[];
-    category?: TaskCategory[];
-    tags?: string[];
+    // category?: TaskCategory[]
+    // tags?: string[]
     assignedTo?: string[];
     groupId?: string[];
     reviewerId?: string[];
@@ -121,8 +115,8 @@ export const createTask = createAsyncThunk(
       // Add required fields
       const dataToSave = {
         ...cleanData,
-        category: cleanData.category || "other",
-        tags: cleanData.tags || [],
+        // category: cleanData.category || "other",
+        // tags: cleanData.tags || [],
         createdAt: timestamp,
         updatedAt: timestamp,
         reminderSet: false,
@@ -428,21 +422,6 @@ const filterTasks = (
     );
   }
 
-  // Apply category filter
-  if (activeFilters.category && activeFilters.category.length > 0) {
-    result = result.filter((task) =>
-      activeFilters.category?.includes(task.category)
-    );
-  }
-
-  // Apply tags filter
-  if (activeFilters.tags && activeFilters.tags.length > 0) {
-    result = result.filter(
-      (task) =>
-        task.tags && activeFilters.tags?.some((tag) => task.tags?.includes(tag))
-    );
-  }
-
   // Apply assignee filter
   if (activeFilters.assignedTo && activeFilters.assignedTo.length > 0) {
     result = result.filter((task) => {
@@ -506,24 +485,7 @@ const taskSlice = createSlice({
       state.activeFilters = {};
       state.filteredTasks = filterTasks(state.tasks, state.searchQuery, {});
     },
-    addTag: (state, action) => {
-      const { taskId, tag } = action.payload;
-      const task = state.tasks.find((t) => t.id === taskId);
-      if (task) {
-        if (!task.tags) task.tags = [];
-        if (!task.tags.includes(tag)) {
-          task.tags.push(tag);
-        }
-      }
-    },
-    removeTag: (state, action) => {
-      const { taskId, tag } = action.payload;
-      const task = state.tasks.find((t) => t.id === taskId);
-      if (task && task.tags) {
-        task.tags = task.tags.filter((t) => t !== tag);
-      }
-    },
-    // Add new reducer to filter tasks by group
+    // Remove addTag and removeTag reducers
     filterTasksByGroup: (state, action) => {
       const groupId = action.payload;
 
@@ -727,8 +689,6 @@ export const {
   setSearchQuery,
   setFilters,
   clearFilters,
-  addTag,
-  removeTag,
   filterTasksByGroup,
 } = taskSlice.actions;
 

@@ -43,6 +43,10 @@ import {
   cancelTaskReminder,
 } from "../../services/NotificationService";
 import TaskComments from "../../components/TaskComments";
+// First, import the DateTimePickerModal component
+import DateTimePickerModal from "@/components/DateTimePickerModal";
+import ContactSelector from "../../components/ContactSelector";
+import type { Contact } from "../../services/ContactsService";
 
 const TaskDetailScreen = ({ navigation, route }: any) => {
   const { taskId } = route.params;
@@ -63,6 +67,14 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [rejections, setRejections] = useState<any[]>([]);
   const { currentGroup } = useAppSelector((state) => state.groups);
+  // Replace the existing showDatePicker state with dateTimePickerVisible
+  const [dateTimePickerVisible, setDateTimePickerVisible] = useState(false);
+  const [contactSelectorVisible, setContactSelectorVisible] = useState(false);
+  const [assignedUser, setAssignedUser] = useState<{
+    id: string;
+    displayName?: string;
+  } | null>(null);
+  const [isDueDatePassed, setIsDueDatePassed] = useState(false);
 
   useEffect(() => {
     dispatch(fetchTask(taskId));
@@ -76,6 +88,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       if (dueDate > new Date()) {
         setReminderEnabled(!!currentTask.reminderSet);
       }
+      setIsDueDatePassed(dueDate < new Date());
     }
   }, [currentTask]);
 
@@ -91,6 +104,22 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
         });
     }
   }, [dispatch, taskId, currentTask?.status]);
+
+  // Replace the handleDateChange function with a new one that works with the DateTimePickerModal
+  const handleDateTimeChange = (date: Date | null) => {
+    setDateTimePickerVisible(false);
+    if (date && isValid(date)) {
+      // Update the task with the new due date
+      dispatch(
+        updateTask({
+          taskId,
+          updates: {
+            dueDate: date.getTime(),
+          },
+        })
+      );
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert("Delete Task", "Are you sure you want to delete this task?", [
@@ -277,23 +306,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     }
   };
 
-  const getCategoryColor = (category: string): string => {
-    switch (category) {
-      case "work":
-        return "#4285F4"; // Blue
-      case "personal":
-        return "#EA4335"; // Red
-      case "shopping":
-        return "#FBBC05"; // Yellow
-      case "health":
-        return "#34A853"; // Green
-      case "finance":
-        return "#8E24AA"; // Purple
-      default:
-        return "#757575"; // Gray
-    }
-  };
-
   // Helper function to safely format dates
   const formatDate = (
     timestamp: number | undefined,
@@ -379,29 +391,27 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
     handleUpdateGroupTaskStatus("reviewRejected", rejectionReason.trim());
   };
 
-  if (isLoading || !currentTask) {
-    return (
-      <View
-        style={[
-          styles.container,
-          styles.centered,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-      </View>
-    );
-  }
-
-  // Check if due date is in the past
-  const isDueDatePassed =
-    currentTask.dueDate && new Date(currentTask.dueDate) < new Date();
+  // Function to handle contact selection
+  const handleContactSelect = (contact: Contact) => {
+    setContactSelectorVisible(false);
+    if (contact) {
+      // Update the task with the selected contact
+      dispatch(
+        updateTask({
+          taskId,
+          updates: {
+            assignedToId: contact.id,
+            assignedToName: contact.displayName,
+          },
+        })
+      );
+    }
+  };
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
@@ -430,51 +440,43 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       <ScrollView style={{ backgroundColor: theme.colors.background }}>
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.title, { color: theme.colors.text }]}>
-            {currentTask.title}
+            {currentTask?.title}
           </Text>
           <View style={styles.metaContainer}>
             <Chip
               style={[
                 styles.statusChip,
-                { backgroundColor: getStatusColor(currentTask.status) },
+                {
+                  backgroundColor: getStatusColor(
+                    currentTask?.status || "todo"
+                  ),
+                },
               ]}
               textStyle={{ color: theme.colors.onPrimary }}
             >
-              {currentTask.status.charAt(0).toUpperCase() +
-                currentTask.status.slice(1)}
+              {currentTask?.status?.charAt(0).toUpperCase() +
+                currentTask?.status?.slice(1)}
             </Chip>
 
             <Chip
               style={[
                 styles.priorityChip,
-                { borderColor: getPriorityColor(currentTask.priority) },
-              ]}
-              textStyle={{ color: getPriorityColor(currentTask.priority) }}
-            >
-              {currentTask.priority.charAt(0).toUpperCase() +
-                currentTask.priority.slice(1)}{" "}
-              Priority
-            </Chip>
-
-            <Chip
-              style={[
-                styles.categoryChip,
                 {
-                  borderColor: getCategoryColor(
-                    currentTask.category || "other"
+                  borderColor: getPriorityColor(
+                    currentTask?.priority || "medium"
                   ),
                 },
               ]}
               textStyle={{
-                color: getCategoryColor(currentTask.category || "other"),
+                color: getPriorityColor(currentTask?.priority || "medium"),
               }}
             >
-              {(currentTask.category || "other").charAt(0).toUpperCase() +
-                (currentTask.category || "other").slice(1)}
+              {currentTask?.priority?.charAt(0).toUpperCase() +
+                currentTask?.priority?.slice(1)}{" "}
+              Priority
             </Chip>
 
-            {/* Add recurring chip if task is recurring */}
-            {currentTask.isRecurring && (
+            {currentTask?.isRecurring && (
               <Chip
                 style={[
                   styles.recurringChip,
@@ -490,7 +492,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
         </View>
 
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
-          {currentTask.description ? (
+          {currentTask?.description ? (
             <>
               <Text
                 style={[styles.sectionTitle, { color: theme.colors.primary }]}
@@ -498,37 +500,11 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 Description
               </Text>
               <Text style={[styles.description, { color: theme.colors.text }]}>
-                {currentTask.description}
+                {currentTask?.description}
               </Text>
             </>
           ) : null}
         </View>
-
-        {currentTask.tags && currentTask.tags.length > 0 && (
-          <View
-            style={[styles.section, { backgroundColor: theme.colors.card }]}
-          >
-            <Text
-              style={[styles.sectionTitle, { color: theme.colors.primary }]}
-            >
-              Tags
-            </Text>
-            <View style={styles.tagsContainer}>
-              {currentTask.tags.map((tag, index) => (
-                <Chip
-                  key={index}
-                  style={[
-                    styles.tagChip,
-                    { backgroundColor: theme.dark ? "#444444" : "#f0f0f0" },
-                  ]}
-                  textStyle={{ color: theme.colors.text }}
-                >
-                  {tag}
-                </Chip>
-              ))}
-            </View>
-          </View>
-        )}
 
         <View style={[styles.section, { backgroundColor: theme.colors.card }]}>
           <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
@@ -550,11 +526,11 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               Created
             </Text>
             <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-              {formatDate(currentTask.createdAt, "MMM d, yyyy 'at' h:mm a")}
+              {formatDate(currentTask?.createdAt, "MMM d, yyyy 'at' h:mm a")}
             </Text>
           </View>
 
-          {currentTask.dueDate && (
+          {currentTask?.dueDate && (
             <View
               style={[
                 styles.detailRow,
@@ -567,24 +543,26 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                   { color: theme.colors.textSecondary },
                 ]}
               >
-                Due Date
+                Due Date & Time
               </Text>
-              <Text
-                style={[
-                  styles.detailValue,
-                  {
-                    color:
-                      isDueDatePassed && currentTask.status !== "completed"
-                        ? theme.colors.error
-                        : theme.colors.text,
-                  },
-                ]}
-              >
-                {formatDate(currentTask.dueDate, "MMM d, yyyy")}
-                {isDueDatePassed &&
-                  currentTask.status !== "completed" &&
-                  " (Overdue)"}
-              </Text>
+              <TouchableOpacity onPress={() => setDateTimePickerVisible(true)}>
+                <Text
+                  style={[
+                    styles.detailValue,
+                    {
+                      color:
+                        isDueDatePassed && currentTask.status !== "completed"
+                          ? theme.colors.error
+                          : theme.colors.primary,
+                    },
+                  ]}
+                >
+                  {formatDate(currentTask?.dueDate, "MMM d, yyyy 'at' h:mm a")}
+                  {isDueDatePassed &&
+                    currentTask.status !== "completed" &&
+                    " (Overdue)"}
+                </Text>
+              </TouchableOpacity>
             </View>
           )}
 
@@ -602,16 +580,16 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
             >
               Assigned To
             </Text>
-            <TouchableOpacity onPress={handleUserSelect}>
+            <TouchableOpacity onPress={() => setContactSelectorVisible(true)}>
               <Text
                 style={[styles.detailValue, { color: theme.colors.primary }]}
               >
-                {currentTask.assignedToName || "Assign to someone"}
+                {currentTask?.assignedToName || "Assign to someone"}
               </Text>
             </TouchableOpacity>
           </View>
 
-          {currentTask.completedAt && (
+          {currentTask?.completedAt && (
             <View
               style={[
                 styles.detailRow,
@@ -627,14 +605,24 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 Completed
               </Text>
               <Text style={[styles.detailValue, { color: theme.colors.text }]}>
-                {formatDate(currentTask.completedAt, "MMM d, yyyy 'at' h:mm a")}
+                {formatDate(
+                  currentTask?.completedAt,
+                  "MMM d, yyyy 'at' h:mm a"
+                )}
               </Text>
             </View>
           )}
 
-          {/* Add recurrence information */}
-          {currentTask.isRecurring &&
-            currentTask.recurrenceIndex !== undefined && (
+          {currentTask?.isRecurring && (
+            <View
+              style={[styles.section, { backgroundColor: theme.colors.card }]}
+            >
+              <Text
+                style={[styles.sectionTitle, { color: theme.colors.primary }]}
+              >
+                Recurrence
+              </Text>
+
               <View
                 style={[
                   styles.detailRow,
@@ -647,17 +635,55 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                     { color: theme.colors.textSecondary },
                   ]}
                 >
-                  Occurrence
+                  Pattern
                 </Text>
                 <Text
                   style={[styles.detailValue, { color: theme.colors.text }]}
                 >
-                  #{currentTask.recurrenceIndex}
+                  {currentTask?.recurrencePatternId ? "Custom" : "Not set"}
                 </Text>
               </View>
-            )}
 
-          {currentTask.dueDate &&
+              {currentTask?.recurrenceIndex !== undefined && (
+                <View
+                  style={[
+                    styles.detailRow,
+                    { borderBottomColor: theme.colors.border },
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.detailLabel,
+                      { color: theme.colors.textSecondary },
+                    ]}
+                  >
+                    Occurrence
+                  </Text>
+                  <Text
+                    style={[styles.detailValue, { color: theme.colors.text }]}
+                  >
+                    #{currentTask?.recurrenceIndex}
+                  </Text>
+                </View>
+              )}
+
+              <Button
+                mode="text"
+                onPress={() => {
+                  Alert.alert(
+                    "View All Occurrences",
+                    "This would show all occurrences of this recurring task."
+                  );
+                }}
+                style={styles.viewAllButton}
+                textColor={theme.colors.primary}
+              >
+                View all occurrences
+              </Button>
+            </View>
+          )}
+
+          {currentTask?.dueDate &&
             !isDueDatePassed &&
             !currentTask.isRecurring && (
               <View
@@ -695,14 +721,16 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
 
           <View style={styles.statusButtons}>
             <Button
-              mode={currentTask.status === "todo" ? "contained" : "outlined"}
+              mode={currentTask?.status === "todo" ? "contained" : "outlined"}
               onPress={() => handleUpdateStatus("todo")}
               style={styles.statusButton}
               buttonColor={
-                currentTask.status === "todo" ? theme.colors.primary : undefined
+                currentTask?.status === "todo"
+                  ? theme.colors.primary
+                  : undefined
               }
               textColor={
-                currentTask.status === "todo"
+                currentTask?.status === "todo"
                   ? theme.colors.onPrimary
                   : theme.colors.text
               }
@@ -712,17 +740,17 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
 
             <Button
               mode={
-                currentTask.status === "inProgress" ? "contained" : "outlined"
+                currentTask?.status === "inProgress" ? "contained" : "outlined"
               }
               onPress={() => handleUpdateStatus("inProgress")}
               style={styles.statusButton}
               buttonColor={
-                currentTask.status === "inProgress"
+                currentTask?.status === "inProgress"
                   ? theme.colors.primary
                   : undefined
               }
               textColor={
-                currentTask.status === "inProgress"
+                currentTask?.status === "inProgress"
                   ? theme.colors.onPrimary
                   : theme.colors.text
               }
@@ -732,17 +760,17 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
 
             <Button
               mode={
-                currentTask.status === "completed" ? "contained" : "outlined"
+                currentTask?.status === "completed" ? "contained" : "outlined"
               }
               onPress={() => handleUpdateStatus("completed")}
               style={styles.statusButton}
               buttonColor={
-                currentTask.status === "completed"
+                currentTask?.status === "completed"
                   ? theme.colors.primary
                   : undefined
               }
               textColor={
-                currentTask.status === "completed"
+                currentTask?.status === "completed"
                   ? theme.colors.onPrimary
                   : theme.colors.text
               }
@@ -750,7 +778,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               Completed
             </Button>
           </View>
-          {currentTask.groupId && (
+          {currentTask?.groupId && (
             <View style={styles.groupTaskActions}>
               <Text
                 style={[styles.sectionTitle, { color: theme.colors.primary }]}
@@ -758,10 +786,9 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 Group Task Workflow
               </Text>
 
-              {/* Assignee Actions */}
-              {currentTask.assignment?.assigneeId === user?.id && (
+              {currentTask?.assignment?.assigneeId === user?.id && (
                 <View style={styles.workflowButtons}>
-                  {currentTask.status === "assigned" && (
+                  {currentTask?.status === "assigned" && (
                     <Button
                       mode="contained"
                       onPress={() => handleUpdateGroupTaskStatus("inProgress")}
@@ -771,7 +798,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                     </Button>
                   )}
 
-                  {currentTask.status === "inProgress" && (
+                  {currentTask?.status === "inProgress" && (
                     <Button
                       mode="contained"
                       onPress={() =>
@@ -783,7 +810,7 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                     </Button>
                   )}
 
-                  {currentTask.status === "reviewRejected" && (
+                  {currentTask?.status === "reviewRejected" && (
                     <Button
                       mode="contained"
                       onPress={() =>
@@ -797,10 +824,9 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 </View>
               )}
 
-              {/* Reviewer Actions */}
-              {currentTask.assignment?.reviewerId === user?.id && (
+              {currentTask?.assignment?.reviewerId === user?.id && (
                 <View style={styles.workflowButtons}>
-                  {currentTask.status === "doneByAssignee" && (
+                  {currentTask?.status === "doneByAssignee" && (
                     <>
                       <Button
                         mode="contained"
@@ -828,10 +854,9 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 </View>
               )}
 
-              {/* Admin Actions */}
               {currentGroup?.createdBy === user?.id && (
                 <View style={styles.workflowButtons}>
-                  {currentTask.status === "reviewed" && (
+                  {currentTask?.status === "reviewed" && (
                     <Button
                       mode="contained"
                       onPress={() => handleUpdateGroupTaskStatus("completed")}
@@ -843,7 +868,6 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 </View>
               )}
 
-              {/* Rejection History */}
               {rejections.length > 0 && (
                 <View style={styles.rejectionsContainer}>
                   <Text
@@ -955,6 +979,21 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
           </Dialog.Actions>
         </Dialog>
       </Portal>
+      {/* Find the section where the date picker is rendered and replace it with the DateTimePickerModal */}
+      <DateTimePickerModal
+        visible={dateTimePickerVisible}
+        onDismiss={() => setDateTimePickerVisible(false)}
+        onConfirm={handleDateTimeChange}
+        initialDate={
+          currentTask?.dueDate ? new Date(currentTask.dueDate) : new Date()
+        }
+      />
+      <ContactSelector
+        visible={contactSelectorVisible}
+        onDismiss={() => setContactSelectorVisible(false)}
+        onSelectContact={handleContactSelect}
+        title="Assign Task To"
+      />
     </KeyboardAvoidingView>
   );
 };
@@ -1087,6 +1126,27 @@ const styles = StyleSheet.create({
   },
   rejectionReason: {
     fontStyle: "italic",
+  },
+  viewAllButton: {
+    alignSelf: "flex-start",
+    marginTop: 8,
+  },
+  assignmentButton: {
+    marginBottom: 24,
+    overflow: "hidden",
+  },
+  assignmentButtonContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+  },
+  assignmentLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  assignmentIcon: {
+    marginRight: 12,
   },
 });
 
