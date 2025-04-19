@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tassenger",
     "slug": "tassengerapp",
-    "version": "1.1.0",
+    "version": "1.2.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -13,7 +13,7 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "buildNumber": "2",
+      "buildNumber": "3",
       "supportsTablet": true,
       "bundleIdentifier": "com.virtualify.tassenger",
       "googleServicesFile": "./ios/Tassenger/GoogleService-Info.plist",
@@ -37,7 +37,7 @@
         "POST_NOTIFICATIONS",
         "android.permission.WRITE_CONTACTS"
       ],
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png"
