@@ -16,6 +16,9 @@ import {
   where,
   getDocs,
 } from "firebase/firestore";
+import { UserService } from "./UserService";
+import { createConversation } from "../store/slices/chatSlice"; // Import createConversation
+import { store } from "../store"; // Import the Redux store
 
 // User profile interface
 export interface UserProfile {
@@ -98,6 +101,9 @@ export const signUp = async (
 
     const userRef = doc(db, "users", firebaseUser.uid);
     await setDoc(userRef, userProfile);
+
+    // Trigger automatic chat creation
+    await createChatsWithExistingContacts(firebaseUser.uid, phoneNumber || "");
 
     return { user: userProfile, isNewUser: true };
   } catch (error) {
@@ -253,5 +259,69 @@ export const updateUserProfile = async (
   } catch (error) {
     console.error("Error updating user profile:", error);
     throw error;
+  }
+};
+
+/**
+ * NEW FUNCTION: Create chats with existing contacts
+ * This function runs when a new user signs up and creates chats with existing contacts
+ */
+const createChatsWithExistingContacts = async (
+  newUserId: string,
+  newUserPhoneNumber: string
+): Promise<void> => {
+  try {
+    // Get all users
+    const usersRef = collection(db, "users");
+    const usersSnapshot = await getDocs(usersRef);
+
+    // Iterate through each user
+    for (const userDoc of usersSnapshot.docs) {
+      const user = userDoc.data() as UserProfile;
+
+      // Skip the new user
+      if (user.id === newUserId) continue;
+
+      // Check if the existing user has the new user's phone number in their contacts
+      const hasContact = await UserService.checkPhoneInContacts(
+        newUserPhoneNumber
+      );
+
+      if (hasContact) {
+        // Check if a conversation already exists between these two users
+        const q = query(
+          collection(db, "conversations"),
+          where("participants", "array-contains", user.id),
+          where("isGroup", "==", false)
+        );
+
+        const querySnapshot = await getDocs(q);
+        const existingConversation = querySnapshot.docs.find((doc) => {
+          const data = doc.data();
+          return data.participants.includes(newUserId);
+        });
+
+        if (!existingConversation) {
+          // Create a new conversation
+          const participants = [user.id, newUserId];
+          const participantNames: Record<string, string> = {
+            [user.id]: user.displayName || user.phoneNumber || "You",
+            [newUserId]: "New User", // Placeholder name
+          };
+
+          await store.dispatch(
+            createConversation({
+              participants,
+              participantNames,
+              isGroup: false,
+            })
+          );
+
+          console.log(`Created chat between ${user.id} and ${newUserId}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error creating chats with existing contacts:", error);
   }
 };

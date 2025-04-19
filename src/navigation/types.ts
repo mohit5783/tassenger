@@ -26,12 +26,14 @@ export type ChatStackParamList = {
   ContactsForChat: undefined;
 };
 
+// Update the ProfileStackParamList to include NotificationPreferences
 export type ProfileStackParamList = {
   ProfileMain: undefined;
   EditProfile: undefined;
   Settings: undefined;
   Help: undefined;
   About: undefined;
+  NotificationPreferences: undefined;
 };
 
 export type GroupStackParamList = {

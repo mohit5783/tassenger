@@ -24,9 +24,12 @@ import {
   orderBy,
   onSnapshot,
   Timestamp,
+  doc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../api/firebase/config";
 import { format } from "date-fns";
+import { sendPushNotification } from "../services/NotificationService";
 
 interface Comment {
   id: string;
@@ -87,13 +90,41 @@ const TaskComments = ({ taskId }: TaskCommentsProps) => {
 
     setIsSending(true);
     try {
-      await addDoc(collection(db, "tasks", taskId, "comments"), {
-        taskId,
-        userId: user.id,
-        userName: user.displayName || user.phoneNumber || "User",
-        text: commentText.trim(),
-        createdAt: Timestamp.now(),
-      });
+      // Add comment to Firestore
+      const commentRef = await addDoc(
+        collection(db, "tasks", taskId, "comments"),
+        {
+          taskId,
+          userId: user.id,
+          userName: user.displayName || user.phoneNumber || "User",
+          text: commentText.trim(),
+          createdAt: Timestamp.now(),
+        }
+      );
+
+      // Send push notification to the other party
+      // Get the task
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+
+      if (taskSnap.exists()) {
+        const task = taskSnap.data() as any;
+
+        // Determine the recipient
+        const recipientId =
+          task.createdBy === user.id ? task.assignedTo : task.createdBy;
+
+        if (recipientId && recipientId !== user.id) {
+          await sendPushNotification(
+            recipientId,
+            "New Comment on Task",
+            `${user.displayName || user.phoneNumber} commented on “${
+              task.title
+            }”: “${commentText.trim()}”`
+          );
+        }
+      }
+
       setCommentText("");
     } catch (error) {
       console.error("Error adding comment:", error);
@@ -119,21 +150,14 @@ const TaskComments = ({ taskId }: TaskCommentsProps) => {
         />
         <View style={styles.commentContent}>
           <View style={styles.commentHeader}>
-            <Text style={[styles.commentAuthor, { color: theme.colors.text }]}>
+            <Text style={styles.commentAuthor}>
               {isOwnComment ? "You" : item.userName}
             </Text>
-            <Text
-              style={[
-                styles.commentTime,
-                { color: theme.colors.textSecondary },
-              ]}
-            >
+            <Text style={styles.commentTime}>
               {formatCommentTime(item.createdAt)}
             </Text>
           </View>
-          <Text style={[styles.commentText, { color: theme.colors.text }]}>
-            {item.text}
-          </Text>
+          <Text style={styles.commentText}>{item.text}</Text>
         </View>
       </View>
     );
@@ -143,7 +167,7 @@ const TaskComments = ({ taskId }: TaskCommentsProps) => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={100}
+      keyboardVerticalOffset={5}
     >
       <Text style={[styles.sectionTitle, { color: theme.colors.primary }]}>
         Comments
@@ -158,41 +182,24 @@ const TaskComments = ({ taskId }: TaskCommentsProps) => {
       ) : (
         <View style={styles.commentsList}>
           {comments.length === 0 ? (
-            <Text
-              style={[styles.emptyText, { color: theme.colors.textSecondary }]}
-            >
+            <Text style={styles.emptyText}>
               No comments yet. Be the first to comment!
             </Text>
           ) : (
             comments.map((item) => (
               <View key={item.id}>
                 {renderCommentItem({ item })}
-                <Divider
-                  style={[
-                    styles.divider,
-                    { backgroundColor: theme.colors.border },
-                  ]}
-                />
+                <Divider style={styles.divider} />
               </View>
             ))
           )}
         </View>
       )}
 
-      <View
-        style={[styles.inputContainer, { borderTopColor: theme.colors.border }]}
-      >
+      <View style={styles.inputContainer}>
         <RNTextInput
-          style={[
-            styles.input,
-            {
-              borderColor: theme.colors.border,
-              backgroundColor: theme.dark ? "#333333" : "#f0f0f0",
-              color: theme.colors.text,
-            },
-          ]}
+          style={styles.input}
           placeholder="Add a comment..."
-          placeholderTextColor={theme.colors.textSecondary}
           value={commentText}
           onChangeText={setCommentText}
           multiline
@@ -244,27 +251,31 @@ const styles = StyleSheet.create({
   },
   commentTime: {
     fontSize: 12,
+    color: "#8E8E93",
   },
   commentText: {
     fontSize: 14,
     lineHeight: 20,
   },
   divider: {
-    height: 1,
+    backgroundColor: "#E0E0E0",
   },
   emptyText: {
     textAlign: "center",
     padding: 20,
+    color: "#8E8E93",
   },
   inputContainer: {
     flexDirection: "row",
     padding: 12,
     borderTopWidth: 1,
+    borderTopColor: "#E0E0E0",
     alignItems: "center",
   },
   input: {
     flex: 1,
     borderWidth: 1,
+    borderColor: "#E0E0E0",
     borderRadius: 20,
     paddingHorizontal: 12,
     paddingVertical: 8,

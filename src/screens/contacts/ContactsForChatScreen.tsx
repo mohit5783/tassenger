@@ -7,6 +7,7 @@ import {
   FlatList,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from "react-native";
 import {
   Text,
@@ -24,6 +25,7 @@ import { createConversation } from "../../store/slices/chatSlice";
 import {
   fetchContacts,
   setSearchQuery,
+  forceRefreshContacts,
 } from "../../store/slices/contactsSlice";
 
 const BATCH_SIZE = 20; // Number of contacts to load initially
@@ -32,18 +34,26 @@ const ContactsForChatScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
   const { user } = useAppSelector((state) => state.auth);
-  const { contacts, filteredContacts, isLoading, hasPermission, searchQuery } =
-    useAppSelector((state) => state.contacts);
+  const {
+    contacts,
+    filteredContacts,
+    isLoading,
+    hasPermission,
+    searchQuery,
+    loadingProgress,
+  } = useAppSelector((state) => state.contacts);
   const [invitingContact, setInvitingContact] = useState<string | null>(null);
   const [displayedContacts, setDisplayedContacts] = useState<Contact[]>([]);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [permissionRequested, setPermissionRequested] = useState(false);
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Request contacts permission and start loading
   const loadContacts = useCallback(async () => {
     setPermissionRequested(true);
     setShowLoadingIndicator(true);
+    setDisplayedContacts([]); // Reset displayed contacts
 
     // Add a delay to ensure loading indicator is visible
     setTimeout(() => {
@@ -87,6 +97,13 @@ const ContactsForChatScreen = ({ navigation }: any) => {
       setDisplayedContacts([...appContacts, ...initialNonAppContacts]);
     }
   }, [filteredContacts, searchQuery]);
+
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setDisplayedContacts([]); // Reset displayed contacts to avoid duplicates
+    dispatch(forceRefreshContacts()).finally(() => setRefreshing(false));
+  }, [dispatch]);
 
   const loadMoreContacts = () => {
     if (searchQuery || isLoadingMore) return; // Don't load more when searching or already loading
@@ -334,15 +351,7 @@ const ContactsForChatScreen = ({ navigation }: any) => {
               { color: theme.colors.text, marginTop: 16 },
             ]}
           >
-            Loading contacts...
-          </Text>
-        </View>
-      ) : displayedContacts.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text
-            style={[styles.emptyText, { color: theme.colors.textSecondary }]}
-          >
-            No contacts found
+            {loadingProgress || "Loading contacts..."}
           </Text>
         </View>
       ) : (
@@ -365,6 +374,36 @@ const ContactsForChatScreen = ({ navigation }: any) => {
           ListFooterComponent={renderFooter}
           onEndReached={loadMoreContacts}
           onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            !isLoading ? (
+              <View style={styles.emptyContainer}>
+                <Text
+                  style={[
+                    styles.emptyText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  No contacts found
+                </Text>
+                <Text
+                  style={[
+                    styles.emptySubText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Invite your contacts to join Tassenger
+                </Text>
+              </View>
+            ) : null
+          }
         />
       )}
     </View>
@@ -427,6 +466,11 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    textAlign: "center",
   },
   loadingText: {
     fontSize: 16,

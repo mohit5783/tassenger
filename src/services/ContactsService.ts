@@ -51,7 +51,10 @@ export const requestContactsPermission = async (): Promise<boolean> => {
   return status === "granted";
 };
 
-export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
+export const getContacts = async (
+  forceRefresh = false,
+  onProgressUpdate?: (message: string, percentage?: number) => void
+): Promise<Contact[]> => {
   // Emit progress update
   contactsEventEmitter.emit("progress", { message: "Checking permissions..." });
 
@@ -64,48 +67,80 @@ export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
     const { status: newStatus } = await Contacts.requestPermissionsAsync();
     if (newStatus !== "granted") {
       contactsEventEmitter.emit("progress", { message: "Permission denied" });
-      throw new Error("Contacts permission not granted");
+      throw new Error("Permission not granted");
     }
   }
 
-  // Check if we have cached contacts and they're not stale
+  // IMPROVEMENT: Return cached contacts immediately if available
+  // This allows showing something while loading fresh data
   if (!forceRefresh) {
     contactsEventEmitter.emit("progress", {
       message: "Checking cached contacts...",
     });
-    const isContactsStale = await isDataStale(
-      STORAGE_KEYS.CONTACTS_LAST_UPDATED,
-      24
-    ); // 24 hours
+    const cachedContacts = await loadFromStorage<Contact[]>(
+      STORAGE_KEYS.CONTACTS
+    );
+    if (cachedContacts && cachedContacts.length > 0) {
+      // Emit these cached contacts immediately so UI can update
+      contactsEventEmitter.emit("partialContacts", {
+        contacts: cachedContacts,
+        isCache: true,
+      });
 
-    if (!isContactsStale) {
-      const cachedContacts = await loadFromStorage<Contact[]>(
-        STORAGE_KEYS.CONTACTS
-      );
-      if (cachedContacts && cachedContacts.length > 0) {
+      // Check if cache is still valid
+      const isContactsStale = await isDataStale(
+        STORAGE_KEYS.CONTACTS_LAST_UPDATED,
+        24
+      ); // 24 hours
+      if (!isContactsStale) {
         contactsEventEmitter.emit("progress", {
           message: "Using cached contacts",
+          complete: true,
         });
         return cachedContacts;
       }
+
+      // If cache is stale, continue loading but we've already shown something to the user
+      contactsEventEmitter.emit("progress", {
+        message: "Refreshing contacts data...",
+      });
     }
   }
 
-  // If we get here, we need to load contacts from the device
-  contactsEventEmitter.emit("progress", { message: "Loading contacts..." });
+  // IMPROVEMENT: Get cached app users immediately
+  // This allows matching contacts with app users faster
+  const cachedAppUsers = await loadFromStorage<AppUserCache>(
+    STORAGE_KEYS.APP_USERS
+  );
+  let appUserMap = new Map<string, AppUser>();
 
-  // Use pagination to handle large contact lists
-  const pageSize = 100;
+  if ((cachedAppUsers?.users ?? []).length > 0) {
+    // Create a map for faster lookups
+    cachedAppUsers?.users.forEach((user) => {
+      appUserMap.set(user.phoneNumber, user);
+    });
+  }
+
+  // IMPROVEMENT: Load contacts in smaller batches with UI updates between batches
+  contactsEventEmitter.emit("progress", {
+    message: "Loading contacts...",
+    percentage: 0,
+  });
+
+  const pageSize = 50; // Smaller batch size for better performance
   let pageOffset = 0;
-  let allContacts: Contacts.Contact[] = [];
+  const allContacts: Contact[] = [];
   let hasMoreContacts = true;
   let pageCount = 0;
+  let processedCount = 0;
+  const phoneNumberSet = new Set<string>(); // To track unique phone numbers
 
   // Fetch contacts in batches to handle large contact lists
   while (hasMoreContacts) {
     pageCount++;
     contactsEventEmitter.emit("progress", {
-      message: `Loading contacts (page ${pageCount})...`,
+      message: `Loading contacts (batch ${pageCount})...`,
+      percentage: Math.min(pageCount * 5, 50), // Show progress percentage
     });
 
     const { data, hasNextPage } = await Contacts.getContactsAsync({
@@ -119,7 +154,53 @@ export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
       pageOffset,
     });
 
-    allContacts = [...allContacts, ...data];
+    // IMPROVEMENT: Process this batch immediately
+    const batchContacts: Contact[] = [];
+
+    data.forEach((contact) => {
+      if (contact.phoneNumbers && contact.phoneNumbers.length > 0) {
+        // Get the first phone number
+        const phoneNumber = formatPhoneNumber(
+          contact.phoneNumbers[0].number || ""
+        );
+
+        if (phoneNumber && !phoneNumberSet.has(phoneNumber)) {
+          phoneNumberSet.add(phoneNumber);
+          processedCount++;
+
+          // Check if this contact is an app user
+          const appUser = appUserMap.get(phoneNumber);
+          const newContact: Contact = {
+            id: contact.id || `phone-${phoneNumber}`,
+            name: contact.name || "Unknown",
+            phoneNumber,
+            hasApp: !!appUser,
+            userId: appUser?.id,
+            email:
+              contact.emails && contact.emails.length > 0
+                ? contact.emails[0].email
+                : undefined,
+            photoURL:
+              contact.imageAvailable && contact.image
+                ? contact.image.uri
+                : undefined,
+          };
+
+          batchContacts.push(newContact);
+          allContacts.push(newContact);
+        }
+      }
+    });
+
+    // IMPROVEMENT: Emit these contacts immediately so UI can update
+    if (batchContacts.length > 0) {
+      contactsEventEmitter.emit("partialContacts", {
+        contacts: batchContacts,
+        batchNumber: pageCount,
+        isPartial: true,
+      });
+    }
+
     hasMoreContacts = hasNextPage;
     pageOffset += pageSize;
 
@@ -127,81 +208,72 @@ export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
     if (pageOffset > 10000) {
       break;
     }
+
+    // IMPROVEMENT: Add a small delay to allow UI to breathe
+    if (hasMoreContacts) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
   }
 
-  if (allContacts.length === 0) {
-    return [];
-  }
+  // If we don't have any cached app users or we're forcing a refresh,
+  // fetch app users from Firestore
+  if (appUserMap.size === 0 || forceRefresh) {
+    contactsEventEmitter.emit("progress", {
+      message: "Fetching app users...",
+      percentage: 60,
+    });
 
-  // Update progress
-  contactsEventEmitter.emit("progress", { message: "Processing contacts..." });
+    const appUsers = await getAppUsers(forceRefresh);
 
-  // Extract phone numbers and names
-  const contacts: Contact[] = [];
-  const phoneNumberSet = new Set<string>(); // To track unique phone numbers
+    // Create a map of phone numbers to app users for faster lookup
+    appUserMap = new Map<string, AppUser>();
+    appUsers.forEach((user) => {
+      appUserMap.set(user.phoneNumber, user);
+    });
 
-  allContacts.forEach((contact) => {
-    if (contact.phoneNumbers && contact.phoneNumbers.length > 0) {
-      // Get the first phone number
-      const phoneNumber = formatPhoneNumber(
-        contact.phoneNumbers[0].number || ""
-      );
+    // Match contacts with app users
+    contactsEventEmitter.emit("progress", {
+      message: "Matching contacts with app users...",
+      percentage: 80,
+    });
 
-      if (phoneNumber && !phoneNumberSet.has(phoneNumber)) {
-        phoneNumberSet.add(phoneNumber);
+    let appUsersFound = 0;
+    const updatedContacts: Contact[] = [];
 
-        const newContact: Contact = {
-          id: contact.id || `phone-${phoneNumber}`, // Ensure id is always a string
-          name: contact.name || "Unknown",
-          phoneNumber,
-          hasApp: false,
-          email:
-            contact.emails && contact.emails.length > 0
-              ? contact.emails[0].email
-              : undefined,
-          photoURL:
-            contact.imageAvailable && contact.image
-              ? contact.image.uri
-              : undefined,
-        };
-        contacts.push(newContact);
+    allContacts.forEach((contact) => {
+      const appUser = appUserMap.get(contact.phoneNumber);
+      const wasAppUser = contact.hasApp;
+
+      if (appUser && !wasAppUser) {
+        contact.hasApp = true;
+        contact.userId = appUser.id;
+        appUsersFound++;
+        updatedContacts.push(contact);
       }
+    });
+
+    // If we found new app users, emit an update
+    if (updatedContacts.length > 0) {
+      contactsEventEmitter.emit("partialContacts", {
+        contacts: updatedContacts,
+        isAppUserUpdate: true,
+      });
+
+      contactsEventEmitter.emit("progress", {
+        message: `Found ${appUsersFound} new app users`,
+        percentage: 90,
+      });
     }
-  });
-
-  // NEW APPROACH: Fetch all app users and match locally
-  contactsEventEmitter.emit("progress", { message: "Fetching app users..." });
-
-  // Get app users (either from cache or Firestore)
-  const appUsers = await getAppUsers(forceRefresh);
-
-  // Match contacts with app users
-  contactsEventEmitter.emit("progress", {
-    message: "Matching contacts with app users...",
-  });
-
-  // Create a map of phone numbers to app users for faster lookup
-  const appUserMap = new Map<string, AppUser>();
-  appUsers.forEach((user) => {
-    appUserMap.set(user.phoneNumber, user);
-  });
-
-  // Match contacts with app users
-  let appUsersFound = 0;
-  contacts.forEach((contact) => {
-    const appUser = appUserMap.get(contact.phoneNumber);
-    if (appUser) {
-      contact.hasApp = true;
-      contact.userId = appUser.id;
-      appUsersFound++;
-    }
-  });
+  }
 
   // Update progress
-  contactsEventEmitter.emit("progress", { message: "Sorting contacts..." });
+  contactsEventEmitter.emit("progress", {
+    message: "Sorting contacts...",
+    percentage: 90,
+  });
 
   // Sort contacts: app users first, then alphabetically
-  const sortedContacts = contacts.sort((a, b) => {
+  const sortedContacts = allContacts.sort((a, b) => {
     if (a.hasApp && !b.hasApp) return -1;
     if (!a.hasApp && b.hasApp) return 1;
     return a.name.localeCompare(b.name);
@@ -213,6 +285,8 @@ export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
 
   contactsEventEmitter.emit("progress", {
     message: "Contacts loaded successfully",
+    complete: true,
+    percentage: 100,
   });
 
   return sortedContacts;
@@ -224,10 +298,11 @@ export const getContacts = async (forceRefresh = false): Promise<Contact[]> => {
 const getAppUsers = async (forceRefresh = false): Promise<AppUser[]> => {
   // Check if we have cached app users and they're not stale
   if (!forceRefresh) {
+    // IMPROVEMENT: Reduce cache lifetime from 12 hours to 2 hours
     const isAppUsersCacheStale = await isDataStale(
       STORAGE_KEYS.APP_USERS_TIMESTAMP,
-      12
-    ); // 12 hours
+      2
+    ); // 2 hours instead of 12
 
     if (!isAppUsersCacheStale) {
       const cachedAppUsers = await loadFromStorage<AppUserCache>(
@@ -240,6 +315,11 @@ const getAppUsers = async (forceRefresh = false): Promise<AppUser[]> => {
   }
 
   try {
+    contactsEventEmitter.emit("progress", {
+      message: "Fetching app users from server...",
+      percentage: 65,
+    });
+
     // Fetch all app users from Firestore
     // Note: This approach works for small to medium user bases
     // For very large user bases (100K+), we might need to implement pagination
@@ -272,37 +352,55 @@ const getAppUsers = async (forceRefresh = false): Promise<AppUser[]> => {
     await saveToStorage(STORAGE_KEYS.APP_USERS, appUserCache);
     await updateTimestamp(STORAGE_KEYS.APP_USERS_TIMESTAMP);
 
+    contactsEventEmitter.emit("progress", {
+      message: `Found ${appUsers.length} app users`,
+      percentage: 70,
+    });
+
     return appUsers;
   } catch (error) {
     console.error("Error fetching app users:", error);
+    contactsEventEmitter.emit("progress", {
+      message: "Error fetching app users",
+      percentage: 70,
+    });
     return [];
   }
 };
 
 /**
- * Get only new app users since the last fetch
- * This can be used for delta syncs
+ * NEW FUNCTION: Refresh app users to discover new users
+ * This specifically checks for users who have joined since the last update
  */
-const getNewAppUsers = async (): Promise<AppUser[]> => {
-  const cachedAppUsers = await loadFromStorage<AppUserCache>(
-    STORAGE_KEYS.APP_USERS
-  );
-  if (!cachedAppUsers) {
-    // If no cache exists, fetch all app users
-    return getAppUsers(true);
-  }
-
+export const refreshAppUsers = async (): Promise<AppUser[]> => {
   try {
-    // Fetch only new app users since the last fetch
+    contactsEventEmitter.emit("progress", {
+      message: "Checking for new app users...",
+    });
+
+    // Get the timestamp of our last app users update
+    const lastUpdateTimestamp =
+      (await loadFromStorage<number>(STORAGE_KEYS.APP_USERS_TIMESTAMP)) || 0;
+
+    // Query Firestore for users created after our last update
     const usersRef = collection(db, "users");
     const q = query(
       usersRef,
-      where("createdAt", ">", cachedAppUsers.timestamp),
+      where("createdAt", ">", lastUpdateTimestamp),
       orderBy("createdAt", "desc")
     );
 
     const querySnapshot = await getDocs(q);
 
+    // If no new users, return early
+    if (querySnapshot.empty) {
+      contactsEventEmitter.emit("progress", {
+        message: "No new app users found",
+      });
+      return [];
+    }
+
+    // Process new users
     const newAppUsers: AppUser[] = [];
     querySnapshot.forEach((doc) => {
       const userData = doc.data();
@@ -317,19 +415,78 @@ const getNewAppUsers = async (): Promise<AppUser[]> => {
       }
     });
 
-    if (newAppUsers.length > 0) {
-      // Update the cache with new app users
-      cachedAppUsers.users = [...newAppUsers, ...cachedAppUsers.users];
+    // Update our cached app users
+    const cachedAppUsers = (await loadFromStorage<AppUserCache>(
+      STORAGE_KEYS.APP_USERS
+    )) || { users: [], timestamp: 0 };
+
+    // Add new users and remove duplicates
+    const existingPhoneNumbers = new Set(
+      cachedAppUsers.users.map((user) => user.phoneNumber)
+    );
+    const uniqueNewUsers = newAppUsers.filter(
+      (user) => !existingPhoneNumbers.has(user.phoneNumber)
+    );
+
+    if (uniqueNewUsers.length > 0) {
+      cachedAppUsers.users = [...uniqueNewUsers, ...cachedAppUsers.users];
       cachedAppUsers.timestamp = Date.now();
 
       await saveToStorage(STORAGE_KEYS.APP_USERS, cachedAppUsers);
       await updateTimestamp(STORAGE_KEYS.APP_USERS_TIMESTAMP);
+
+      contactsEventEmitter.emit("progress", {
+        message: `Found ${uniqueNewUsers.length} new app users`,
+      });
+
+      // Update contact list with new app users
+      await updateContactsWithNewAppUsers(uniqueNewUsers);
     }
 
-    return cachedAppUsers.users;
+    return uniqueNewUsers;
   } catch (error) {
-    console.error("Error fetching new app users:", error);
-    return cachedAppUsers.users;
+    console.error("Error refreshing app users:", error);
+    return [];
+  }
+};
+
+/**
+ * NEW FUNCTION: Update contacts with new app users
+ * This updates the cached contacts when new app users are discovered
+ */
+const updateContactsWithNewAppUsers = async (
+  newAppUsers: AppUser[]
+): Promise<void> => {
+  // Load cached contacts
+  const cachedContacts =
+    (await loadFromStorage<Contact[]>(STORAGE_KEYS.CONTACTS)) || [];
+  let updated = false;
+  const updatedContacts: Contact[] = [];
+
+  // Create a map for faster lookups
+  const phoneToAppUser = new Map<string, AppUser>();
+  newAppUsers.forEach((user) => {
+    phoneToAppUser.set(user.phoneNumber, user);
+  });
+
+  // Update contacts that match new app users
+  cachedContacts.forEach((contact) => {
+    const matchingAppUser = phoneToAppUser.get(contact.phoneNumber);
+    if (matchingAppUser && !contact.hasApp) {
+      contact.hasApp = true;
+      contact.userId = matchingAppUser.id;
+      updated = true;
+      updatedContacts.push(contact);
+    }
+  });
+
+  // Save updated contacts if changes were made
+  if (updated) {
+    await saveToStorage(STORAGE_KEYS.CONTACTS, cachedContacts);
+    contactsEventEmitter.emit("contactsUpdated", {
+      contacts: cachedContacts,
+      updatedContacts: updatedContacts,
+    });
   }
 };
 

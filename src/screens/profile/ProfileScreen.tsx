@@ -13,6 +13,7 @@ import {
   Briefcase,
   Mail,
   Phone,
+  Bell,
 } from "react-native-feather";
 
 const ProfileScreen = ({ navigation }: any) => {
@@ -161,6 +162,14 @@ const ProfileScreen = ({ navigation }: any) => {
             { backgroundColor: theme.dark ? "#1E1E1E" : "white" },
           ]}
         >
+          <List.Item
+            title="Notification Settings"
+            left={(props) => (
+              <List.Icon {...props} icon={(props) => <Bell {...props} />} />
+            )}
+            onPress={() => navigation.navigate("NotificationPreferences")}
+          />
+          <Divider />
           <List.Item
             title="Settings"
             left={(props) => (

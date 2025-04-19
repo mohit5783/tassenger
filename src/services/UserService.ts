@@ -7,6 +7,8 @@ import {
   where,
 } from "firebase/firestore";
 import { db } from "../api/firebase/config";
+import * as Contacts from "expo-contacts";
+import { formatPhoneNumber, comparePhoneNumbers } from "../utils/phoneUtils";
 
 export interface UserProfile {
   id: string;
@@ -85,9 +87,12 @@ export const UserService = {
 
         userDocs.forEach((doc) => {
           if (doc.exists()) {
-            const userData = { id: doc.id, ...doc.data() } as UserProfile;
-            users.push(userData);
-            userCache.set(doc.id, userData);
+            const data = doc.data();
+            if (typeof data === "object" && data !== null) {
+              const userData = { id: doc.id, ...data } as UserProfile;
+              users.push(userData);
+              userCache.set(doc.id, userData);
+            }
           }
         });
       }
@@ -150,6 +155,54 @@ export const UserService = {
     } catch (error) {
       console.error("Error searching users:", error);
       return [];
+    }
+  },
+
+  /**
+   * Checks if a phone number exists in the user's contacts
+   * @param phoneNumber The phone number to check
+   * @returns True if the phone number exists in contacts
+   */
+  checkPhoneInContacts: async (phoneNumber: string): Promise<boolean> => {
+    try {
+      const { status } = await Contacts.getPermissionsAsync();
+
+      if (status !== "granted") {
+        const { status: newStatus } = await Contacts.requestPermissionsAsync();
+        if (newStatus !== "granted") {
+          return false;
+        }
+      }
+
+      const { data } = await Contacts.getContactsAsync({
+        fields: [Contacts.Fields.PhoneNumbers],
+      });
+
+      if (data.length === 0) {
+        return false;
+      }
+
+      // Format the input phone number for comparison
+      const formattedInputNumber = formatPhoneNumber(phoneNumber);
+
+      // Check if the phone number exists in any contact
+      for (const contact of data) {
+        if (contact.phoneNumbers) {
+          for (const phoneNumberObj of contact.phoneNumbers) {
+            const contactNumber = formatPhoneNumber(
+              phoneNumberObj.number || ""
+            );
+            if (comparePhoneNumbers(contactNumber, formattedInputNumber)) {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
+    } catch (error) {
+      console.error("Error checking contacts:", error);
+      return false;
     }
   },
 

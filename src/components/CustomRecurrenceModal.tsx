@@ -141,7 +141,7 @@ const CustomRecurrenceModal: React.FC<CustomRecurrenceModalProps> = ({
     onConfirm(options);
   };
 
-  const keyboardVerticalOffset = Platform.OS === "ios" ? 40 : 0;
+  const keyboardVerticalOffset = Platform.OS === "ios" ? 5 : 0;
 
   return (
     <Portal>

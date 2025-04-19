@@ -471,22 +471,17 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
-        <Appbar.BackAction
-          color={theme.colors.onPrimary}
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Task Details" color={theme.colors.onPrimary} />
+      <Appbar.Header style={{ backgroundColor: "black" }}>
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Task Details" color="white" />
         <Menu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
           anchor={
             <Appbar.Action
-              icon={(props) => (
-                <MoreVertical {...props} color={theme.colors.onPrimary} />
-              )}
+              icon={(props) => <MoreVertical {...props} color="white" />}
               onPress={() => setMenuVisible(true)}
-              color={theme.colors.onPrimary}
+              color="white"
             />
           }
         >
@@ -534,8 +529,8 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
                 color: getPriorityColor(currentTask?.priority || "medium"),
               }}
             >
-              {currentTask?.priority?.charAt(0).toUpperCase() ??
-                "" + currentTask?.priority?.slice(1)}{" "}
+              {(currentTask?.priority || "medium").charAt(0).toUpperCase() +
+                currentTask?.priority?.slice(1)}{" "}
               Priority
             </Chip>
 
@@ -871,6 +866,17 @@ const TaskDetailScreen = ({ navigation, route }: any) => {
               Completed
             </Button>
           </View>
+          {currentTask?.status !== "completed" && (
+            <Button
+              mode="contained"
+              onPress={() => handleUpdateStatus("completed")}
+              style={styles.completeButton}
+              buttonColor={theme.colors.primary}
+              textColor={theme.colors.onPrimary}
+            >
+              Mark as Complete
+            </Button>
+          )}
           {currentTask?.groupId && (
             <View style={styles.groupTaskActions}>
               <Text
@@ -1262,6 +1268,9 @@ const styles = StyleSheet.create({
   },
   reminderItem: {
     marginBottom: 4,
+  },
+  completeButton: {
+    marginTop: 16,
   },
 });
 

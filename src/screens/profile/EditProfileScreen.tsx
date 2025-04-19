@@ -40,7 +40,7 @@ const EditProfileScreen = ({ navigation }: any) => {
   const [bio, setBio] = useState(user?.bio || "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL || "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
-  const [countryCode, setCountryCode] = useState("+1"); // Default to US country code
+  const [countryCode, setCountryCode] = useState("+91"); // Default to India country code
 
   // Get the appropriate default avatar based on sex
   const getDefaultAvatar = () => {
@@ -132,7 +132,7 @@ const EditProfileScreen = ({ navigation }: any) => {
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: theme.colors.background }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 5 : 0}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />

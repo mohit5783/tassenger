@@ -1,5 +1,5 @@
 "use client";
-
+import React from "react";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { Provider as ReduxProvider } from "react-redux";
@@ -30,6 +30,8 @@ import RootNavigator from "./src/navigation/RootNavigator";
 import { View, Text, AppState } from "react-native";
 import { registerForPushNotificationsAsync } from "./src/services/NotificationService";
 import { cleanupListeners } from "./src/store/slices/chatSlice";
+// Add import for the background service
+import { startBackgroundService } from "./src/services/BackgroundService";
 
 // Configure notifications
 Notifications.setNotificationHandler({
@@ -73,6 +75,9 @@ const AppContent = () => {
         }
       }
     );
+
+    // Start the background service to check for new app users
+    startBackgroundService();
 
     return () => {
       Notifications.removeNotificationSubscription(responseListener);

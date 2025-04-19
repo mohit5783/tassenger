@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   View,
   StyleSheet,
   FlatList,
   TouchableOpacity,
   Alert,
+  RefreshControl,
 } from "react-native";
 import {
   Text,
@@ -16,68 +17,192 @@ import {
   Divider,
   Button,
   Searchbar,
+  Snackbar,
 } from "react-native-paper";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useAppSelector, useAppDispatch } from "../../store/hooks";
-import { sendInviteSMS, type Contact } from "../../services/ContactsService";
-import { createConversation } from "../../store/slices/chatSlice";
+import type { Contact } from "../../services/ContactsService";
 import {
   fetchContacts,
   setSearchQuery,
+  forceRefreshContacts,
+  checkForNewAppUsers,
 } from "../../store/slices/contactsSlice";
+import { useFocusEffect } from "@react-navigation/native";
+import { useAuth } from "../../context/AuthContext";
+import { sendInviteSMS } from "../../utils/sms";
+import { contactsEventEmitter } from "../../utils/eventEmitter";
+
+const CONTACTS_BATCH_SIZE = 20;
 
 const ContactsScreen = ({ navigation }: any) => {
   const { theme } = useTheme();
   const dispatch = useAppDispatch();
-  const { user } = useAppSelector((state) => state.auth);
-  const { contacts, filteredContacts, isLoading, hasPermission, searchQuery } =
-    useAppSelector((state) => state.contacts);
+  const { user } = useAuth();
+  const {
+    contacts,
+    filteredContacts,
+    isLoading,
+    hasPermission,
+    searchQuery,
+    loadingProgress,
+    loadingPercentage,
+    isCheckingNewUsers,
+    lastNewUserCheck,
+    newUsersFound,
+  } = useAppSelector((state) => state.contacts);
+
   const [invitingContact, setInvitingContact] = useState<string | null>(null);
-  // Add state for permission request status
   const [permissionRequested, setPermissionRequested] = useState(false);
   const [showLoadingIndicator, setShowLoadingIndicator] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [showSnackbar, setShowSnackbar] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState("");
+  const [displayedContacts, setDisplayedContacts] = useState<Contact[]>([]);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
+  // Load contacts on mount
   useEffect(() => {
     loadContacts();
   }, []);
 
-  // Update the loadContacts function
-  const loadContacts = async () => {
+  // Set up event listener for partial contacts loading
+  useEffect(() => {
+    const onPartialContacts = (data: {
+      contacts: Contact[];
+      isPartial?: boolean;
+      isCache?: boolean;
+    }) => {
+      if (data.contacts && data.contacts.length > 0) {
+        setDisplayedContacts((prev) => [...prev, ...data.contacts]);
+      }
+    };
+
+    const onProgress = (data: {
+      message: string;
+      percentage?: number;
+      complete?: boolean;
+    }) => {
+      if (data.message) {
+        console.log(`Contact loading progress: ${data.message}`);
+      }
+
+      if (data.complete) {
+        setShowLoadingIndicator(false);
+      }
+    };
+
+    contactsEventEmitter.on("partialContacts", onPartialContacts);
+    contactsEventEmitter.on("progress", onProgress);
+
+    return () => {
+      contactsEventEmitter.off("partialContacts", onPartialContacts);
+      contactsEventEmitter.off("progress", onProgress);
+    };
+  }, []);
+
+  // Update displayed contacts when filtered contacts change
+  useEffect(() => {
+    if (filteredContacts.length > 0 && !isLoading) {
+      // If searching, show all filtered results
+      if (searchQuery) {
+        setDisplayedContacts(filteredContacts);
+      } else {
+        // Otherwise, maintain pagination
+        const initialCount = Math.min(
+          CONTACTS_BATCH_SIZE,
+          filteredContacts.length
+        );
+        setDisplayedContacts(filteredContacts.slice(0, initialCount));
+      }
+    }
+  }, [filteredContacts, searchQuery, isLoading]);
+
+  // Check for new app users when the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // Only check for new users if we already have contacts loaded
+      if (contacts.length > 0) {
+        handleCheckForNewUsers();
+      }
+    }, [contacts.length])
+  );
+
+  // Show snackbar when new users are found
+  useEffect(() => {
+    if (newUsersFound > 0) {
+      setSnackbarMessage(
+        `Found ${newUsersFound} new ${
+          newUsersFound === 1 ? "user" : "users"
+        } in your contacts!`
+      );
+      setShowSnackbar(true);
+    }
+  }, [newUsersFound]);
+
+  // Load contacts with permission request
+  const loadContacts = useCallback(async () => {
     setPermissionRequested(true);
     setShowLoadingIndicator(true);
+    setDisplayedContacts([]); // Reset displayed contacts
 
     // Add delay to ensure loading indicator is visible
     setTimeout(() => {
       dispatch(fetchContacts());
     }, 500);
+  }, [dispatch]);
+
+  // Handle pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    setDisplayedContacts([]); // Reset displayed contacts to avoid duplicates
+    dispatch(forceRefreshContacts()).finally(() => setRefreshing(false));
+  }, [dispatch]);
+
+  // Load more contacts when scrolling
+  const loadMoreContacts = () => {
+    if (searchQuery || isLoadingMore || isLoading) return; // Don't load more when searching or already loading
+
+    // If we've shown all contacts, don't do anything
+    if (displayedContacts.length >= filteredContacts.length) return;
+
+    setIsLoadingMore(true);
+
+    // Load the next batch
+    const nextBatch = filteredContacts.slice(
+      displayedContacts.length,
+      displayedContacts.length + CONTACTS_BATCH_SIZE
+    );
+
+    // Add delay to simulate loading (can be removed in production)
+    setTimeout(() => {
+      setDisplayedContacts((prev) => [...prev, ...nextBatch]);
+      setIsLoadingMore(false);
+    }, 300);
+  };
+
+  // Check for new app users
+  const handleCheckForNewUsers = async () => {
+    dispatch(checkForNewAppUsers()).then((result: any) => {
+      if (result?.payload > 0) {
+        setSnackbarMessage(
+          `Found ${result.payload} new ${
+            result.payload === 1 ? "user" : "users"
+          } in your contacts!`
+        );
+        setShowSnackbar(true);
+      }
+    });
   };
 
   const handleContactPress = async (contact: Contact) => {
     if (!user) return;
 
-    if (contact.hasApp && contact.userId) {
-      try {
-        // Create or get existing conversation
-        const result = await dispatch(
-          createConversation({
-            participants: [user.id, contact.userId],
-            participantNames: {
-              [user.id]: user.displayName || user.phoneNumber || "You",
-              [contact.userId]: contact.name,
-            },
-            isGroup: false,
-          })
-        ).unwrap();
-
-        // Navigate to conversation
-        navigation.navigate("Chat", {
-          screen: "ConversationDetail",
-          params: { conversationId: result.id },
-        });
-      } catch (error) {
-        console.error("Error creating conversation:", error);
-        Alert.alert("Error", "Failed to open chat");
-      }
+    if (contact.hasApp) {
+      navigation.navigate("Chat", {
+        screen: "ConversationDetail",
+        params: { conversationId: contact.userId },
+      });
     } else {
       // Show placeholder chat screen for non-app users
       navigation.navigate("Chat", {
@@ -125,10 +250,19 @@ const ContactsScreen = ({ navigation }: any) => {
       )}
 
       <View style={styles.contactInfo}>
-        <Text style={styles.contactName}>{item.name}</Text>
-        <Text style={styles.contactPhone}>{item.phoneNumber}</Text>
+        <Text style={[styles.contactName, { color: theme.colors.text }]}>
+          {item.name}
+        </Text>
+        <Text
+          style={[styles.contactPhone, { color: theme.colors.textSecondary }]}
+        >
+          {item.phoneNumber}
+        </Text>
         {item.email && (
-          <Text style={styles.contactEmail} numberOfLines={1}>
+          <Text
+            style={[styles.contactEmail, { color: theme.colors.textSecondary }]}
+            numberOfLines={1}
+          >
             {item.email}
           </Text>
         )}
@@ -147,6 +281,33 @@ const ContactsScreen = ({ navigation }: any) => {
     </TouchableOpacity>
   );
 
+  const renderFooter = () => {
+    if (isLoadingMore) {
+      return (
+        <View style={styles.footerLoader}>
+          <ActivityIndicator size="small" color={theme.colors.primary} />
+          <Text style={{ color: theme.colors.textSecondary, marginLeft: 8 }}>
+            Loading more contacts...
+          </Text>
+        </View>
+      );
+    }
+
+    if (!searchQuery && displayedContacts.length < filteredContacts.length) {
+      return (
+        <Button
+          mode="text"
+          onPress={loadMoreContacts}
+          style={styles.loadMoreButton}
+        >
+          Load more contacts
+        </Button>
+      );
+    }
+
+    return null;
+  };
+
   const renderSectionHeader = (title: string) => (
     <View
       style={[
@@ -154,7 +315,11 @@ const ContactsScreen = ({ navigation }: any) => {
         { backgroundColor: theme.colors.background },
       ]}
     >
-      <Text style={styles.sectionTitle}>{title}</Text>
+      <Text
+        style={[styles.sectionTitle, { color: theme.colors.textSecondary }]}
+      >
+        {title}
+      </Text>
     </View>
   );
 
@@ -165,12 +330,7 @@ const ContactsScreen = ({ navigation }: any) => {
         style={[styles.container, { backgroundColor: theme.colors.background }]}
       >
         <Appbar.Header style={{ backgroundColor: "black" }}>
-          <Appbar.BackAction
-            color="white"
-            onPress={() => navigation.goBack()}
-          />
-          <Appbar.Content title="Contacts" color="white"
- />
+          <Appbar.Content title="Contacts" color="white" />
         </Appbar.Header>
 
         <View style={styles.centered}>
@@ -203,10 +363,12 @@ const ContactsScreen = ({ navigation }: any) => {
                 mode="contained"
                 onPress={loadContacts}
                 buttonColor={theme.colors.primary}
-                disabled={permissionRequested}
-                loading={permissionRequested}
+                disabled={permissionRequested && showLoadingIndicator}
+                loading={permissionRequested && showLoadingIndicator}
               >
-                {permissionRequested ? "Loading..." : "Grant Permission"}
+                {permissionRequested && showLoadingIndicator
+                  ? "Loading..."
+                  : "Grant Permission"}
               </Button>
             </>
           )}
@@ -215,17 +377,24 @@ const ContactsScreen = ({ navigation }: any) => {
     );
   }
 
+  // Separate contacts into those with the app and those without
+  const appUsers = displayedContacts.filter((contact) => contact.hasApp);
+  const nonAppUsers = displayedContacts.filter((contact) => !contact.hasApp);
+
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
-        <Appbar.BackAction
-          color="white"
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Contacts" color="white"
- />
+        <Appbar.Content title="Contacts" color="white" />
+        {contacts.length > 0 && (
+          <Appbar.Action
+            icon="account-search"
+            color="white"
+            onPress={handleCheckForNewUsers}
+            disabled={isCheckingNewUsers}
+          />
+        )}
       </Appbar.Header>
 
       <Searchbar
@@ -233,33 +402,81 @@ const ContactsScreen = ({ navigation }: any) => {
         onChangeText={handleSearch}
         value={searchQuery}
         style={styles.searchBar}
+        iconColor={theme.colors.primary}
       />
 
-      {isLoading ? (
+      {isLoading && displayedContacts.length === 0 ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.colors.primary} />
+          <Text
+            style={[
+              styles.loadingText,
+              { color: theme.colors.text, marginTop: 16 },
+            ]}
+          >
+            {loadingProgress || "Loading contacts..."}
+          </Text>
+          {loadingPercentage !== null && (
+            <Text style={{ color: theme.colors.textSecondary, marginTop: 8 }}>
+              {loadingPercentage}% complete
+            </Text>
+          )}
         </View>
       ) : (
         <FlatList
-          data={filteredContacts}
+          data={displayedContacts}
           renderItem={renderContactItem}
           keyExtractor={(item) => item.id}
           ItemSeparatorComponent={() => <Divider />}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No contacts found</Text>
-            </View>
-          }
           ListHeaderComponent={
-            filteredContacts.some((c) => c.hasApp)
-              ? renderSectionHeader("Contacts on Tassenger")
-              : null
+            <>
+              {appUsers.length > 0 &&
+                renderSectionHeader("Contacts on Tassenger")}
+              {appUsers.length > 0 && nonAppUsers.length > 0 && (
+                <Divider style={styles.sectionDivider} />
+              )}
+              {nonAppUsers.length > 0 &&
+                renderSectionHeader("Invite to Tassenger")}
+            </>
           }
-          stickyHeaderIndices={
-            filteredContacts.some((c) => c.hasApp) ? [0] : []
+          ListFooterComponent={renderFooter}
+          onEndReached={loadMoreContacts}
+          onEndReachedThreshold={0.5}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={[theme.colors.primary]}
+              tintColor={theme.colors.primary}
+            />
+          }
+          ListEmptyComponent={
+            !isLoading ? (
+              <View style={styles.emptyContainer}>
+                <Text
+                  style={{
+                    color: theme.colors.textSecondary,
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  {searchQuery
+                    ? "No contacts match your search"
+                    : "No contacts found"}
+                </Text>
+              </View>
+            ) : null
           }
         />
       )}
+      <Snackbar
+        visible={showSnackbar}
+        onDismiss={() => setShowSnackbar(false)}
+        duration={3000}
+        style={{ backgroundColor: theme.colors.primary }}
+      >
+        {snackbarMessage}
+      </Snackbar>
     </View>
   );
 };
@@ -272,9 +489,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    padding: 20,
   },
   searchBar: {
     margin: 8,
+    elevation: 0,
   },
   contactItem: {
     flexDirection: "row",
@@ -307,13 +526,39 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: "#8E8E93",
   },
+  sectionDivider: {
+    height: 1,
+    backgroundColor: "#E0E0E0",
+  },
   emptyContainer: {
-    padding: 32,
+    flex: 1,
+    justifyContent: "center",
     alignItems: "center",
+    padding: 32,
   },
   emptyText: {
     fontSize: 16,
     color: "#8E8E93",
+    marginBottom: 8,
+  },
+  emptySubText: {
+    fontSize: 14,
+    color: "#8E8E93",
+    textAlign: "center",
+  },
+  footerLoader: {
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  loadMoreButton: {
+    alignSelf: "center",
+    margin: 16,
+  },
+  loadingText: {
+    fontSize: 16,
+    textAlign: "center",
   },
 });
 

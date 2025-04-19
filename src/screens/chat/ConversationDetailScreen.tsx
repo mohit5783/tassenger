@@ -55,6 +55,15 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     }
   }, [dispatch, conversationId, user, readReceipts]);
 
+  // Auto-scroll to the latest message when messages change
+  useEffect(() => {
+    if (messages.length > 0 && flatListRef.current) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100); // Small delay to ensure rendering is complete
+    }
+  }, [messages]);
+
   // Replace the handleSendMessage function with this improved version:
   const handleSendMessage = async () => {
     if (!messageText.trim() || !user || !currentConversation || isSending)
@@ -75,7 +84,10 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
         })
       ).unwrap();
 
-      // No need to manually add the message to the UI - the Firebase listener will handle it
+      // Scroll to the bottom after sending a message
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     } catch (error) {
       console.error("Error sending message:", error);
       // Optionally restore the message text if sending fails
@@ -376,7 +388,7 @@ const ConversationDetailScreen = ({ navigation, route }: any) => {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: theme.colors.background }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      keyboardVerticalOffset={Platform.OS === "ios" ? 5 : 0}
     >
       <Appbar.Header style={{ backgroundColor: "black" }}>
         <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
@@ -559,6 +571,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: "center",
     alignItems: "center",
+  },
+  messagePreview: {
+    fontSize: 14,
+    color: "#8E8E93",
+    marginBottom: 4,
   },
 });
 

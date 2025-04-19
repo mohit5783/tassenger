@@ -7,6 +7,7 @@ import EditProfileScreen from "../screens/profile/EditProfileScreen";
 import SettingsScreen from "../screens/profile/SettingsScreen";
 import HelpScreen from "../screens/profile/HelpScreen";
 import AboutScreen from "../screens/profile/AboutScreen";
+import NotificationPreferencesScreen from "../screens/profile/NotificationPreferencesScreen";
 
 const Stack = createNativeStackNavigator<ProfileStackParamList>();
 
@@ -38,6 +39,11 @@ const ProfileNavigator = ({ route }: any) => {
       <Stack.Screen
         name="About"
         component={AboutScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="NotificationPreferences"
+        component={NotificationPreferencesScreen}
         options={{ headerShown: false }}
       />
     </Stack.Navigator>

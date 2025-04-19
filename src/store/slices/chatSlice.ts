@@ -13,6 +13,12 @@ import {
 } from "firebase/firestore";
 import { db } from "../../api/firebase/config";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+// Add this import at the top of the file
+import {
+  sendPushNotification,
+  sendMessageReadNotification,
+  sendGroupMentionNotification,
+} from "../../services/NotificationService";
 
 export interface Message {
   id: string;
@@ -312,6 +318,7 @@ export const sendMessage = createAsyncThunk(
 
         await updateDoc(conversationRef, {
           lastMessage: {
+            id: messageRef.id,
             text,
             senderId,
             createdAt: timestamp,
@@ -320,6 +327,61 @@ export const sendMessage = createAsyncThunk(
           unreadCount,
           lastMessageReadByAll: false, // New message is not read by all yet
         });
+
+        // Check for mentions in group chats
+        if (conversationData.isGroup) {
+          // Simple mention detection - look for @username pattern
+          const mentionRegex = /@(\w+)/g;
+          const mentions = text.match(mentionRegex);
+
+          if (mentions && mentions.length > 0) {
+            // For each mention, find the corresponding user
+            for (const mention of mentions) {
+              const username = mention.substring(1); // Remove the @ symbol
+
+              // Find user by display name (simplified approach)
+              // In a real app, you'd have a more robust way to resolve mentions
+              for (const participantId of participants) {
+                if (participantId === senderId) continue; // Skip sender
+
+                const participantName =
+                  conversationData.participantNames?.[participantId] || "";
+
+                // Check if mention matches participant name (case insensitive)
+                if (
+                  participantName.toLowerCase().includes(username.toLowerCase())
+                ) {
+                  // Send mention notification
+                  await sendGroupMentionNotification(
+                    participantId,
+                    senderId,
+                    senderName,
+                    conversationId,
+                    conversationData.title || "Group Chat",
+                    text
+                  );
+                }
+              }
+            }
+          }
+        } else {
+          // For direct messages, send regular notification
+          const recipientId = participants.find((id: any) => id !== senderId);
+          if (recipientId) {
+            await sendPushNotification(
+              recipientId,
+              `New message from ${senderName}`,
+              text, // Use the message text as the notification body
+              {
+                type: "messageReceived",
+                itemId: conversationId,
+                itemType: "chat",
+                senderId,
+                messageId: messageRef.id,
+              }
+            );
+          }
+        }
       }
 
       return {
@@ -401,9 +463,14 @@ export const markMessagesAsRead = createAsyncThunk(
   "chat/markMessagesAsRead",
   async (
     { conversationId, userId }: { conversationId: string; userId: string },
-    { rejectWithValue }
+    { rejectWithValue, getState }
   ) => {
     try {
+      // Get user info for notifications
+      const { auth } = getState() as { auth: { user: any } };
+      const readerName =
+        auth.user?.displayName || auth.user?.phoneNumber || "A user";
+
       // Update the conversation's unread count for this user
       const conversationRef = doc(db, "conversations", conversationId);
       const conversationSnap = await getDoc(conversationRef);
@@ -431,6 +498,17 @@ export const markMessagesAsRead = createAsyncThunk(
               unreadCount,
               lastMessageReadByAll: allParticipantsRead,
             });
+
+            // Send read receipt notification to the sender
+            if (allParticipantsRead) {
+              await sendMessageReadNotification(
+                lastMessage.id || "unknown",
+                conversationId,
+                userId,
+                lastMessage.senderId,
+                readerName
+              );
+            }
           } else {
             await updateDoc(conversationRef, { unreadCount });
           }
@@ -470,6 +548,17 @@ export const markMessagesAsRead = createAsyncThunk(
               readBy,
               readAt,
             });
+
+            // Send read receipt notification to the sender
+            if (messageData.senderId && messageData.senderId !== userId) {
+              await sendMessageReadNotification(
+                messageDoc.id,
+                conversationId,
+                userId,
+                messageData.senderId,
+                readerName
+              );
+            }
           }
         });
 

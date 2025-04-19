@@ -17,6 +17,12 @@ import type {
   TaskGroupStatus,
   TaskRejection,
 } from "../../types/group";
+import {
+  sendPushNotification,
+  sendTaskUpdateNotification,
+  sendRecurringTaskNotification,
+  scheduleApproachingDeadlineNotification,
+} from "../../services/NotificationService";
 
 // Update the TaskStatus type to include group statuses
 export type TaskStatus =
@@ -61,6 +67,7 @@ export interface Task {
   reminders?: TaskReminder[]; // Add this line for structured reminders
   parentTaskId?: string; // For subtasks
   subtasks?: string[]; // IDs of subtasks
+  dependencies?: string[]; // IDs of dependent tasks
   // Recurring task properties
   isRecurring?: boolean;
   recurrencePatternId?: string;
@@ -133,6 +140,15 @@ export const createTask = createAsyncThunk(
       };
 
       const taskRef = await addDoc(collection(db, "tasks"), dataToSave);
+
+      // Send push notification to assignee
+      if (taskData.assignedTo && taskData.assignedTo !== taskData.createdBy) {
+        await sendPushNotification(
+          taskData.assignedTo,
+          "New Task Assigned",
+          `You’ve been assigned a new task: “${taskData.title}”`
+        );
+      }
 
       return {
         id: taskRef.id,
@@ -209,14 +225,77 @@ export const updateTask = createAsyncThunk(
   "tasks/updateTask",
   async (
     { taskId, updates }: { taskId: string; updates: Partial<Task> },
-    { rejectWithValue }
+    { rejectWithValue, getState }
   ) => {
     try {
+      const { auth } = getState() as { auth: { user: any } };
+      const userId = auth.user?.id;
+
+      // Get the current task to compare changes
       const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+
+      if (!taskSnap.exists()) {
+        return rejectWithValue("Task not found");
+      }
+
+      const currentTask = taskSnap.data() as Task;
+
+      // Track which fields were updated for notifications
+      const updatedFields: string[] = [];
+      Object.keys(updates).forEach((key) => {
+        if (
+          JSON.stringify(updates[key as keyof Task]) !==
+          JSON.stringify(currentTask[key as keyof Task])
+        ) {
+          updatedFields.push(key);
+        }
+      });
+
+      // Update the task
       await updateDoc(taskRef, {
         ...updates,
         updatedAt: Date.now(),
       });
+
+      // Send notifications for task updates
+      if (updatedFields.length > 0 && userId) {
+        // Don't include technical fields in notifications
+        const notifiableFields = updatedFields.filter(
+          (field) =>
+            ![
+              "updatedAt",
+              "reminderSet",
+              "reminderIdentifier",
+              "reminderIdentifiers",
+            ].includes(field)
+        );
+
+        if (notifiableFields.length > 0) {
+          await sendTaskUpdateNotification(
+            { ...currentTask, ...updates, id: taskId },
+            notifiableFields,
+            userId
+          );
+        }
+      }
+
+      // If due date was updated, schedule approaching deadline notification
+      if (updates.dueDate && updates.dueDate !== currentTask.dueDate) {
+        // Schedule notifications at 24, 12, and 2 hours before deadline
+        await scheduleApproachingDeadlineNotification(
+          { ...currentTask, ...updates, id: taskId },
+          24
+        );
+        await scheduleApproachingDeadlineNotification(
+          { ...currentTask, ...updates, id: taskId },
+          12
+        );
+        await scheduleApproachingDeadlineNotification(
+          { ...currentTask, ...updates, id: taskId },
+          2
+        );
+      }
 
       return { taskId, updates };
     } catch (error: any) {
@@ -283,6 +362,15 @@ export const createGroupTask = createAsyncThunk(
         reminderSet: false,
         reminderIdentifier: null,
       });
+
+      // Send push notification to assignee
+      if (taskData.assigneeId && taskData.createdBy !== taskData.assigneeId) {
+        await sendPushNotification(
+          taskData.assigneeId,
+          "New Task Assigned",
+          `You’ve been assigned a new task: “${taskData.title}”`
+        );
+      }
 
       return {
         id: taskRef.id,
@@ -362,6 +450,17 @@ export const updateTaskStatus = createAsyncThunk(
           reason: rejectionReason,
           timestamp,
         };
+      }
+
+      // Send push notification to creator
+      if (taskData.createdBy !== auth.user.id) {
+        await sendPushNotification(
+          taskData.createdBy,
+          "Task Status Updated",
+          `${auth.user.displayName || auth.user.phoneNumber} moved task “${
+            taskData.title
+          }” from *${taskData.status}* to *${newStatus}*`
+        );
       }
 
       await updateDoc(taskRef, updates);
@@ -702,3 +801,87 @@ export const {
 } = taskSlice.actions;
 
 export default taskSlice.reducer;
+
+export const generateNextOccurrence = createAsyncThunk(
+  "recurrence/generateNextOccurrence",
+  async (
+    { taskId, completedDate }: { taskId: string; completedDate: Date },
+    { dispatch, getState, rejectWithValue }
+  ) => {
+    try {
+      const taskRef = doc(db, "tasks", taskId);
+      const taskSnap = await getDoc(taskRef);
+
+      if (!taskSnap.exists()) {
+        return rejectWithValue("Task not found");
+      }
+
+      const task = taskSnap.data() as Task;
+
+      if (!task.isRecurring || !task.recurrencePattern) {
+        return rejectWithValue(
+          "Task is not recurring or recurrence pattern is missing"
+        );
+      }
+
+      const { patternType, interval, daysOfWeek, dayOfMonth, monthOfYear } =
+        task.recurrencePattern;
+
+      let nextDueDate: Date | null = null;
+      const nextIndex = (task.recurrenceIndex || 0) + 1;
+
+      const calculateNextDueDate = (
+        currentDate: Date,
+        patternType: string,
+        interval: number
+      ): Date | null => {
+        const newDate = new Date(currentDate);
+
+        switch (patternType) {
+          case "daily":
+            newDate.setDate(newDate.getDate() + interval);
+            break;
+          case "weekly":
+            newDate.setDate(newDate.getDate() + interval * 7);
+            break;
+          case "monthly":
+            newDate.setMonth(newDate.getMonth() + interval);
+            break;
+          case "yearly":
+            newDate.setFullYear(newDate.getFullYear() + interval);
+            break;
+          default:
+            return null;
+        }
+
+        return newDate;
+      };
+
+      nextDueDate = calculateNextDueDate(completedDate, patternType, interval);
+
+      // Create the next task occurrence
+      const { id, createdAt, updatedAt, completedAt, ...taskTemplate } = task;
+
+      const nextTask = {
+        ...taskTemplate,
+        dueDate: nextDueDate ? nextDueDate.getTime() : undefined,
+        status: "todo" as TaskStatus,
+        recurrenceIndex: nextIndex,
+      };
+
+      // Create the new task
+      const result = await dispatch(createTask(nextTask)).unwrap();
+
+      // Send notification about the new recurring task
+      if (result) {
+        await sendRecurringTaskNotification(result);
+      }
+
+      return result;
+    } catch (error: any) {
+      return rejectWithValue(
+        error.message || "Failed to generate next occurrence"
+      );
+    }
+  }
+);

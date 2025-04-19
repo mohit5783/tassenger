@@ -16,7 +16,7 @@ const ProfileCompletionScreen = ({ navigation, route }: any) => {
 
   const [displayName, setDisplayName] = useState(user?.displayName || "");
   const [phoneNumber, setPhoneNumber] = useState(user?.phoneNumber || "");
-  const [countryCode, setCountryCode] = useState("+1");
+  const [countryCode, setCountryCode] = useState("+91");
   const [contactsPermissionRequested, setContactsPermissionRequested] =
     useState(false);
 

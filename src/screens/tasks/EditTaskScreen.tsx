@@ -297,12 +297,9 @@ const EditTaskScreen = ({ navigation, route }: any) => {
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
-      <Appbar.Header style={{ backgroundColor: theme.colors.primary }}>
-        <Appbar.BackAction
-          color={theme.colors.onPrimary}
-          onPress={() => navigation.goBack()}
-        />
-        <Appbar.Content title="Edit Task" color={theme.colors.onPrimary} />
+      <Appbar.Header style={{ backgroundColor: "black" }}>
+        <Appbar.BackAction color="white" onPress={() => navigation.goBack()} />
+        <Appbar.Content title="Edit Task" color="white" />
       </Appbar.Header>
 
       <ScrollView style={{ backgroundColor: theme.colors.background }}>
